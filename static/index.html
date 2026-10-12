@@ -64,14 +64,14 @@
       <h2>Which strategy fits this market?</h2>
       <div class="row">
         <div>
-          <label for="instrument">Instrument</label>
-          <input id="instrument" list="instrument-list" value="NIFTY50" size="14" autocomplete="off">
-          <datalist id="instrument-list"></datalist>
+          <label for="instrument-select">Instrument</label>
+          <select id="instrument-select"></select>
+          <input id="instrument" class="hidden" size="14" autocomplete="off" placeholder="NSE symbol, e.g. RELIANCE">
         </div>
         <div><label>Horizon</label><div class="seg" id="horizons"></div></div>
         <button class="primary" id="go">Analyze market</button>
       </div>
-      <p class="muted small">Pick a listed instrument or type any NSE stock symbol (e.g. RELIANCE).</p>
+      <p class="muted small" id="market-hint"></p>
     </section>
     <div id="market-result"></div>
   </section>

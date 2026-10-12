@@ -414,8 +414,20 @@ def create_app(settings: Settings | None = None, service: RecommendationService 
     # ---- participant: market tool ---------------------------------------
     @app.get("/api/options")
     def options(user: dict = Depends(current_user)):
+        # Only offer instruments some strategy actually trades; free-typed symbols only make sense
+        # when there are generic strategies (no fixed underlying).
+        strategies = list(settings.strategies.values())
+        generic = [st for st in strategies if not st.underlyings]
+        instruments = []
+        for i in settings.instruments:
+            trading = [st for st in strategies if i["key"] in st.underlyings] + generic
+            if trading:
+                instruments.append({"key": i["key"], "label": i["label"],
+                                    "strategies": [{"name": st.name, "horizons": st.horizons,
+                                                    "active_days": st.active_days} for st in trading]})
         return {
-            "instruments": [{"key": i["key"], "label": i["label"]} for i in settings.instruments],
+            "instruments": instruments,
+            "any_symbol": bool(generic),
             "horizons": [{"key": "1d", "label": "1 Day"}, {"key": "1w", "label": "1 Week"},
                          {"key": "1m", "label": "1 Month"}],
             "strategies": [{"id": s.id, "name": s.name, "category": s.category, "horizons": s.horizons}

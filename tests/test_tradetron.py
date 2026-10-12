@@ -119,3 +119,14 @@ def test_rule_engine_scores_on_own_underlying(env, web):
     assert scores["bnf_15_min_super_trend_intraday_instant"]["rule_score"] == 100     # trend on BANKNIFTY
     assert scores["atm_roll_aggressive_diversified_kapoor"]["rule_score"] == 100      # calm NIFTY + SENSEX
     assert scores["atm_roll_aggressive_diversified_kapoor"]["on"] == "NIFTY 50, SENSEX"
+
+
+def test_options_list_only_traded_indices(env, web):
+    _install_tradetron(env, web)
+    for sid in [k for k, st in env.settings.strategies.items() if not st.underlyings]:
+        env.settings.delete_strategy(sid)
+    opts = web.participant().get("/api/options").json()
+    assert opts["any_symbol"] is False
+    assert [i["key"] for i in opts["instruments"]] == ["NIFTY50", "BANKNIFTY", "SENSEX"]
+    bank = next(i for i in opts["instruments"] if i["key"] == "BANKNIFTY")
+    assert len(bank["strategies"]) == 2

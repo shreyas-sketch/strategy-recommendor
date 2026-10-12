@@ -100,21 +100,41 @@ $("profile-form").addEventListener("submit", async (e) => {
 
 $("logout").onclick = async () => { await api("/api/auth/logout", { method: "POST" }).catch(() => {}); location.href = "/login"; };
 
+let marketOpts = null;
+const DAY_RULE = { expiry_day: "trades only on expiry day", expiry_and_day_before: "trades only on expiry day and the day before" };
+
+function marketHint() {
+  if (!marketOpts) return;
+  const sel = $("instrument-select").value;
+  $("instrument").classList.toggle("hidden", sel !== "__other");
+  const inst = marketOpts.instruments.find((i) => i.key === sel);
+  if (!inst) { $("market-hint").textContent = "Strategies without a fixed index are judged on the stock you type."; return; }
+  const here = inst.strategies.filter((st) => st.horizons.includes(horizon));
+  $("market-hint").textContent = here.length
+    ? `Judged for ${inst.label} (${horizon}): ` + here.map((st) => st.name + (DAY_RULE[st.active_days] && horizon === "1d" ? ` — ${DAY_RULE[st.active_days]}` : "")).join("; ")
+    : `No strategy for ${inst.label} is meant for the ${horizon} horizon — try another horizon.`;
+}
+
 async function initMarket() {
-  const opts = await api("/api/options");
-  $("instrument-list").innerHTML = opts.instruments.map((i) => `<option value="${esc(i.key)}">${esc(i.label)}</option>`).join("");
-  $("horizons").innerHTML = opts.horizons.map((h) => `<button data-h="${esc(h.key)}" class="${h.key === horizon ? "on" : ""}">${esc(h.label)}</button>`).join("");
+  marketOpts = await api("/api/options");
+  $("instrument-select").innerHTML = marketOpts.instruments.map((i) =>
+    `<option value="${esc(i.key)}">${esc(i.label)} (${i.strategies.length} strateg${i.strategies.length === 1 ? "y" : "ies"})</option>`).join("") +
+    (marketOpts.any_symbol ? '<option value="__other">Other NSE stock…</option>' : "");
+  $("horizons").innerHTML = marketOpts.horizons.map((h) => `<button data-h="${esc(h.key)}" class="${h.key === horizon ? "on" : ""}">${esc(h.label)}</button>`).join("");
   $("horizons").addEventListener("click", (e) => {
     const b = e.target.closest("button"); if (!b) return;
     horizon = b.dataset.h;
     [...$("horizons").children].forEach((x) => x.classList.toggle("on", x === b));
+    marketHint();
   });
+  $("instrument-select").onchange = marketHint;
+  marketHint();
 }
 
 $("go").onclick = async () => {
   $("go").disabled = true; $("go").textContent = "Analyzing…"; $("error").classList.add("hidden");
   try {
-    const payload = await api("/api/recommend", { method: "POST", json: { instrument: $("instrument").value.trim(), horizon } });
+    const payload = await api("/api/recommend", { method: "POST", json: { instrument: $("instrument-select").value === "__other" ? $("instrument").value.trim() : $("instrument-select").value, horizon } });
     $("market-result").innerHTML = recHTML(payload);
   } catch (err) { showError($("error"), err); $("market-result").innerHTML = ""; }
   finally { $("go").disabled = false; $("go").textContent = "Analyze market"; }
