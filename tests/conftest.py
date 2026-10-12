@@ -70,9 +70,12 @@ class FakeMessages:
         rec = Recommendation(
             market_summary="Strong uptrend.", regime="strong up", confidence="high",
             top_strategy_id=ids[0],
+            why_top_over_others=f"{ids[0]} beats {ids[-1]} because ADX 31 favours trend following.",
+            deciding_factors=[{"factor": "ADX 31 — strong trend", "favors": [ids[0], "made_up"], "hurts": ids[1:]}],
             rankings=[{"strategy_id": i, "fit_score": 90 - 10 * k, "verdict": "recommended",
-                       "why": "x", "watch_out": "y"} for k, i in enumerate(ids)] +
-                     [{"strategy_id": "made_up", "fit_score": 99, "verdict": "recommended", "why": "", "watch_out": ""}],
+                       "why": "x", "watch_out": "y", "vs_top": f"loses to {ids[0]}"} for k, i in enumerate(ids)] +
+                     [{"strategy_id": "made_up", "fit_score": 99, "verdict": "recommended", "why": "",
+                       "watch_out": "", "vs_top": ""}],
             reassess_if=["ADX drops below 20"],
         )
         usage = SimpleNamespace(input_tokens=3000, output_tokens=1000,

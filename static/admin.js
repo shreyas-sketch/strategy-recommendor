@@ -12,7 +12,10 @@ function load(k) { try { return sessionStorage.getItem(k) || ""; } catch { retur
 async function api(path, opts = {}) {
   const res = await fetch(path, { ...opts, headers: { "Content-Type": "application/json", "X-Admin-Token": token, ...(opts.headers || {}) } });
   const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(body.detail || res.statusText);
+  if (!res.ok) {
+    const d = body.detail;
+    throw new Error(Array.isArray(d) ? d.map((x) => `${(x.loc || []).slice(1).join(".")}: ${x.msg}`).join("; ") : d || res.statusText);
+  }
   return body;
 }
 function showError(e) { $("error").textContent = e.message || e; $("error").classList.remove("hidden"); }
@@ -20,7 +23,7 @@ function clearError() { $("error").classList.add("hidden"); }
 
 async function refresh() {
   clearError();
-  const [cfg, usage] = await Promise.all([api("/api/admin/settings"), api("/api/admin/usage")]);
+  const [cfg, usage] = await Promise.all([api("/api/admin/settings"), api("/api/admin/usage"), loadStrategies()]);
   const s = cfg.settings;
   selectedModel = s.active_model;
 
@@ -87,9 +90,79 @@ $("save-budget").onclick = (e) => save({
   provider_order: $("providers").value.split(",").map((x) => x.trim()).filter(Boolean),
 }, e.target);
 $("reload").onclick = async () => {
-  try { const r = await api("/api/admin/strategies/reload", { method: "POST" }); $("out").textContent = "Loaded: " + r.loaded.join(", "); $("out").classList.remove("hidden"); }
+  try { await api("/api/admin/strategies/reload", { method: "POST" }); await loadStrategies(); }
   catch (e) { showError(e); }
 };
+
+// ---- strategy manager ------------------------------------------------
+let strategies = [];
+let editingId = null;  // null = creating
+
+document.querySelectorAll(".checks[data-group]").forEach((box) => {
+  const values = box.dataset.values.split(",");
+  const labels = (box.dataset.labels || box.dataset.values).split(",");
+  box.innerHTML = values.map((v, i) => `<label><input type="checkbox" value="${v}"> ${esc(labels[i])}</label>`).join("");
+});
+const getChecks = (g) => [...document.querySelectorAll(`.checks[data-group="${g}"] input:checked`)].map((i) => i.value);
+const setChecks = (g, vals) => document.querySelectorAll(`.checks[data-group="${g}"] input`).forEach((i) => { i.checked = (vals || []).includes(i.value); });
+
+async function loadStrategies() {
+  strategies = (await api("/api/admin/strategies")).strategies;
+  $("strategy-list").innerHTML = `<tr><th>Name</th><th>ID</th><th>Category</th><th>Horizons</th><th></th></tr>` +
+    strategies.map((st) => `<tr><td>${esc(st.name)}</td><td class="muted">${esc(st.id)}</td><td>${esc(st.category)}</td>
+      <td>${esc(st.horizons.join(", "))}</td>
+      <td class="actions"><button data-edit="${esc(st.id)}">Edit</button> <button class="danger" data-del="${esc(st.id)}">Delete</button></td></tr>`).join("");
+}
+
+function openForm(st) {
+  editingId = st ? st.id : null;
+  $("form-title").textContent = st ? `Edit: ${st.name}` : "Add strategy";
+  $("f-name").value = st?.name || ""; $("f-id").value = st?.id || ""; $("f-category").value = st?.category || "trend";
+  $("f-description").value = st?.description || ""; $("f-logic").value = st?.logic || "";
+  $("f-avoid").value = (st?.avoid_conditions || []).join("\n"); $("f-risk").value = st?.risk_notes || "";
+  setChecks("horizons", st?.horizons || ["1d", "1w", "1m"]); setChecks("instruments", st?.instruments || []);
+  const c = st?.ideal_conditions || {};
+  setChecks("trend", c.trend); setChecks("trend_strength", c.trend_strength); setChecks("volatility", c.volatility);
+  $("f-squeeze").value = String(c.squeeze ?? "any");
+  $("strategy-form-card").classList.remove("hidden");
+  $("strategy-form-card").scrollIntoView({ behavior: "smooth" });
+}
+
+$("add-strategy").onclick = () => openForm(null);
+$("f-cancel").onclick = () => $("strategy-form-card").classList.add("hidden");
+$("f-name").addEventListener("input", () => {
+  if (editingId === null) $("f-id").value = $("f-name").value.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 40);
+});
+$("strategy-list").addEventListener("click", async (e) => {
+  const edit = e.target.dataset.edit, del = e.target.dataset.del;
+  if (edit) openForm(strategies.find((st) => st.id === edit));
+  if (del && confirm(`Delete strategy "${del}"? This removes its file.`)) {
+    try { await api(`/api/admin/strategies/${encodeURIComponent(del)}`, { method: "DELETE" }); await loadStrategies(); }
+    catch (err) { showError(err); }
+  }
+});
+$("strategy-form").addEventListener("submit", async (e) => {
+  e.preventDefault(); clearError();
+  const sq = $("f-squeeze").value;
+  const body = {
+    id: $("f-id").value.trim(), name: $("f-name").value.trim(), category: $("f-category").value,
+    horizons: getChecks("horizons"), instruments: getChecks("instruments"),
+    description: $("f-description").value.trim(), logic: $("f-logic").value.trim(),
+    ideal_conditions: { trend: getChecks("trend"), trend_strength: getChecks("trend_strength"),
+                        volatility: getChecks("volatility"), squeeze: sq === "any" ? "any" : sq === "true" },
+    avoid_conditions: $("f-avoid").value.split("\n").map((x) => x.trim()).filter(Boolean),
+    risk_notes: $("f-risk").value.trim(),
+  };
+  if (!body.horizons.length) return showError("Pick at least one horizon.");
+  $("f-save").disabled = true;
+  try {
+    await api(editingId ? `/api/admin/strategies/${encodeURIComponent(editingId)}` : "/api/admin/strategies",
+              { method: editingId ? "PUT" : "POST", body: JSON.stringify(body) });
+    $("strategy-form-card").classList.add("hidden");
+    await loadStrategies();
+  } catch (err) { showError(err); }
+  finally { $("f-save").disabled = false; }
+});
 $("test").onclick = async (e) => {
   e.target.disabled = true; $("out").textContent = "Running…"; $("out").classList.remove("hidden");
   try {

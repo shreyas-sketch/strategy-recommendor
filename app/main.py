@@ -12,7 +12,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ValidationError
 
-from .config import ROOT, BudgetAction, Effort, Horizon, Settings
+from .config import ROOT, BudgetAction, Effort, Horizon, Settings, Strategy
 from .data.base import ProviderError
 from .service import BudgetExceeded, RecommendationService
 from .store import Store
@@ -107,6 +107,41 @@ def create_app(settings: Settings | None = None, service: RecommendationService 
         summary = service.store.usage_summary()
         summary["budget_usd"] = settings.admin.monthly_budget_usd
         return summary
+
+    @app.get("/api/admin/strategies", dependencies=[Depends(require_admin)])
+    def list_strategies():
+        return {"strategies": [st.model_dump() for st in settings.strategies.values()]}
+
+    @app.post("/api/admin/strategies", dependencies=[Depends(require_admin)], status_code=201)
+    def create_strategy(strategy: Strategy):
+        try:
+            saved = settings.save_strategy(strategy)
+        except ValueError as exc:
+            raise HTTPException(409, str(exc))
+        service.store.cache_clear()
+        return {"strategy": saved.model_dump()}
+
+    @app.put("/api/admin/strategies/{strategy_id}", dependencies=[Depends(require_admin)])
+    def update_strategy(strategy_id: str, strategy: Strategy):
+        try:
+            saved = settings.save_strategy(strategy, original_id=strategy_id)
+        except KeyError:
+            raise HTTPException(404, f"Unknown strategy {strategy_id!r}")
+        except ValueError as exc:
+            raise HTTPException(409, str(exc))
+        service.store.cache_clear()
+        return {"strategy": saved.model_dump()}
+
+    @app.delete("/api/admin/strategies/{strategy_id}", dependencies=[Depends(require_admin)])
+    def delete_strategy(strategy_id: str):
+        try:
+            settings.delete_strategy(strategy_id)
+        except KeyError:
+            raise HTTPException(404, f"Unknown strategy {strategy_id!r}")
+        except ValueError as exc:
+            raise HTTPException(409, str(exc))
+        service.store.cache_clear()
+        return {"deleted": strategy_id}
 
     @app.post("/api/admin/strategies/reload", dependencies=[Depends(require_admin)])
     def reload_strategies():

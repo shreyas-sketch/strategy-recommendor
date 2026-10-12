@@ -71,3 +71,22 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .meter.hot > i { background: var(--bad); }
 .table-scroll { overflow-x: auto; }
 .hidden { display: none; }
+.vs { margin-top: 4px; padding-left: 8px; border-left: 2px solid var(--border); }
+.matrix th.c, .matrix td.c { text-align: center; min-width: 90px; }
+.matrix th.c { font-size: 12px; }
+.matrix .pick { background: var(--good-soft); }
+.matrix .yes { color: var(--good); font-weight: 700; }
+.matrix .no { color: var(--bad); font-weight: 700; }
+textarea { font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--border);
+  border-radius: 8px; padding: 8px 10px; width: 100%; resize: vertical; }
+.form-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+.form-grid .full { grid-column: 1 / -1; }
+.form-grid input, .form-grid select { width: 100%; }
+.checks { display: flex; flex-wrap: wrap; gap: 4px 14px; }
+.checks label { display: inline-flex; align-items: center; gap: 5px; color: var(--text); font-size: 14px; margin: 0; }
+.checks input { width: auto; }
+fieldset { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin: 0; }
+legend { font-size: 13px; color: var(--muted); padding: 0 4px; }
+button.danger { color: var(--bad); }
+.actions { white-space: nowrap; }
+.actions button { padding: 4px 10px; font-size: 13px; }

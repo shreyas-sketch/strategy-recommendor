@@ -60,12 +60,15 @@ class Conditions(BaseModel):
     squeeze: bool | Literal["any"] = "any"
 
 
+Category = Literal["trend", "mean_reversion", "breakout", "volatility_selling", "volatility_buying", "other"]
+
+
 class Strategy(BaseModel):
-    id: str
-    name: str
-    category: str = "other"
+    id: str = Field(pattern=r"^[a-z0-9_]{2,40}$")
+    name: str = Field(min_length=1, max_length=80)
+    category: Category = "other"
     instruments: list[str] = []
-    horizons: list[Horizon] = list(HORIZONS)
+    horizons: list[Horizon] = Field(default=list(HORIZONS), min_length=1)
     description: str = ""
     logic: str = ""
     ideal_conditions: Conditions = Conditions()
@@ -91,6 +94,7 @@ class Settings:
         self._defaults = raw.get("defaults", {})
         self.admin = self._load_admin()
         self.strategies: dict[str, Strategy] = {}
+        self._strategy_paths: dict[str, Path] = {}
         self.reload_strategies()
 
     # ---- admin settings -------------------------------------------------
@@ -115,19 +119,52 @@ class Settings:
             return merged
 
     # ---- strategies -----------------------------------------------------
+    @property
+    def strategy_dir(self) -> Path:
+        return self.config_dir / "strategies"
+
     def reload_strategies(self) -> dict[str, Strategy]:
         found: dict[str, Strategy] = {}
-        for path in sorted((self.config_dir / "strategies").glob("*.y*ml")):
+        paths: dict[str, Path] = {}
+        for path in sorted(self.strategy_dir.glob("*.y*ml")):
             if path.name.startswith("_"):
                 continue
             strat = Strategy(**yaml.safe_load(path.read_text()))
             if strat.id in found:
                 raise ValueError(f"Duplicate strategy id {strat.id!r} in {path.name}")
             found[strat.id] = strat
+            paths[strat.id] = path
         if not found:
-            raise ValueError(f"No strategies found in {self.config_dir / 'strategies'}")
+            raise ValueError(f"No strategies found in {self.strategy_dir}")
         self.strategies = found
+        self._strategy_paths = paths
         return found
+
+    def save_strategy(self, strategy: Strategy, original_id: str | None = None) -> Strategy:
+        """Create (original_id=None) or update a strategy; writes config/strategies/<id>.yaml."""
+        with self._lock:
+            if original_id is not None and original_id not in self.strategies:
+                raise KeyError(original_id)
+            if strategy.id in self.strategies and strategy.id != original_id:
+                raise ValueError(f"A strategy with id {strategy.id!r} already exists")
+            old_path = self._strategy_paths.get(original_id) if original_id else None
+            path = old_path if old_path and strategy.id == original_id else self.strategy_dir / f"{strategy.id}.yaml"
+            tmp = path.with_suffix(".tmp")
+            tmp.write_text(yaml.safe_dump(strategy.model_dump(), sort_keys=False, allow_unicode=True, width=100))
+            tmp.replace(path)
+            if old_path and old_path != path:
+                old_path.unlink(missing_ok=True)
+            self.reload_strategies()
+            return self.strategies[strategy.id]
+
+    def delete_strategy(self, strategy_id: str) -> None:
+        with self._lock:
+            if strategy_id not in self.strategies:
+                raise KeyError(strategy_id)
+            if len(self.strategies) == 1:
+                raise ValueError("Cannot delete the last strategy")
+            self._strategy_paths[strategy_id].unlink()
+            self.reload_strategies()
 
     def strategies_for(self, horizon: Horizon) -> list[Strategy]:
         return [s for s in self.strategies.values() if horizon in s.horizons]

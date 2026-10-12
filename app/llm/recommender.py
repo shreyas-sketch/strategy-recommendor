@@ -27,6 +27,15 @@ class StrategyAssessment(BaseModel):
     verdict: Literal["recommended", "conditional", "avoid"]
     why: str = Field(description="1-2 sentences tying specific snapshot numbers to the strategy's rules")
     watch_out: str = Field(description="The main way this strategy could fail in this market")
+    vs_top: str = Field(description=(
+        "Comparison with the top pick. For the top pick: its edge over the runner-up. For every other "
+        "strategy: the specific condition it fails (or fits worse) that the top pick meets, citing numbers"))
+
+
+class DecidingFactor(BaseModel):
+    factor: str = Field(description="A market fact with its number, e.g. 'ADX 31 — strong trend'")
+    favors: list[str] = Field(description="Strategy ids this fact helps")
+    hurts: list[str] = Field(description="Strategy ids this fact works against")
 
 
 class Recommendation(BaseModel):
@@ -34,6 +43,10 @@ class Recommendation(BaseModel):
     regime: str = Field(description="Short regime label, e.g. 'strong uptrend, normal volatility'")
     confidence: Literal["low", "medium", "high"]
     top_strategy_id: str = Field(description=f"Best strategy id, or {NO_TRADE} if nothing fits")
+    why_top_over_others: str = Field(description=(
+        "2-4 sentences validating the pick: name the runner-up and the numbers that separate them. "
+        f"If {NO_TRADE}, explain why even the best-scoring strategy is not good enough"))
+    deciding_factors: list[DecidingFactor] = Field(description="3-6 market facts that decided the ranking")
     rankings: list[StrategyAssessment] = Field(description="Every catalog strategy, best first")
     reassess_if: list[str] = Field(description="Concrete market changes that would flip the recommendation")
 
@@ -50,7 +63,11 @@ How to decide:
 - Compare the regime (trend, trend strength, volatility, squeeze, gaps, choppiness) against each strategy's logic, ideal conditions and avoid conditions.
 - The rule_score is a simple pre-computed match; use it as a hint, and override it when the detailed numbers disagree (e.g. ADX and efficiency ratio conflict, intraday and daily trends disagree, volatility is rising fast).
 - Mixed or conflicting signals should lower confidence. If no strategy is a reasonable fit, set top_strategy_id to {no_trade} and say why — sitting out is a valid recommendation.
-- Rank every strategy in the catalog exactly once, using its exact id.
+- Rank every strategy in the catalog exactly once, using its exact id. Fit scores must be consistent with the order.
+- Justify the pick against the alternatives, not just on its own merits. Participants must be able to verify why the top pick beats each other strategy:
+  - why_top_over_others: name the runner-up and the specific numbers that separate them.
+  - vs_top on every strategy: the concrete condition it fails (or fits worse) that the top pick meets.
+  - deciding_factors: the 3-6 market facts that drove the ranking, each listing the strategy ids it favors and hurts.
 - Write for traders, not quants: short, concrete, cite the key numbers (e.g. "ADX 31", "volatility in the 85th percentile").
 - This is decision support, not financial advice. Never promise profits.
 
@@ -140,7 +157,11 @@ def _sanitize(rec: Recommendation, strategies: list[Strategy], rule_scores: list
         if rs["strategy_id"] not in seen:
             ranked.append(StrategyAssessment(
                 strategy_id=rs["strategy_id"], fit_score=rs["rule_score"], verdict="conditional",
-                why="Not assessed by the model; score from the rule engine.", watch_out="—"))
+                why="Not assessed by the model; score from the rule engine.", watch_out="—",
+                vs_top="Not compared by the model."))
+    for f in rec.deciding_factors:
+        f.favors = [i for i in f.favors if i in valid]
+        f.hurts = [i for i in f.hurts if i in valid]
     ranked.sort(key=lambda a: -a.fit_score)
     rec.rankings = ranked
     if rec.top_strategy_id != NO_TRADE and rec.top_strategy_id not in valid:

@@ -68,9 +68,47 @@
     </section>
 
     <section class="card">
-      <h2>Strategies &amp; testing</h2>
+      <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:8px">
+        <h2 style="margin:0">Strategies</h2>
+        <div class="row"><button id="reload">Reload from files</button><button class="primary" id="add-strategy">+ Add strategy</button></div>
+      </div>
+      <div class="table-scroll"><table id="strategy-list"></table></div>
+    </section>
+
+    <section class="card hidden" id="strategy-form-card">
+      <h2 id="form-title">Add strategy</h2>
+      <form id="strategy-form" class="form-grid" autocomplete="off">
+        <div><label for="f-name">Name</label><input id="f-name" required maxlength="80" placeholder="VWAP Pullback"></div>
+        <div><label for="f-id">ID (lowercase, digits, _)</label><input id="f-id" required pattern="[a-z0-9_]{2,40}" placeholder="vwap_pullback"></div>
+        <div>
+          <label for="f-category">Category</label>
+          <select id="f-category">
+            <option value="trend">Trend following</option><option value="mean_reversion">Mean reversion</option>
+            <option value="breakout">Breakout</option><option value="volatility_selling">Volatility selling (option writing)</option>
+            <option value="volatility_buying">Volatility buying (option buying)</option><option value="other">Other</option>
+          </select>
+        </div>
+        <fieldset><legend>Horizons it is meant for</legend><div class="checks" data-group="horizons" data-values="1d,1w,1m" data-labels="1 Day,1 Week,1 Month"></div></fieldset>
+        <fieldset><legend>Instruments</legend><div class="checks" data-group="instruments" data-values="index,equity,options,futures"></div></fieldset>
+        <div class="full"><label for="f-description">Short description (participants see this)</label><input id="f-description" maxlength="300"></div>
+        <div class="full"><label for="f-logic">Logic — entry, exit, stop-loss, sizing (Claude reads this)</label><textarea id="f-logic" rows="5" required></textarea></div>
+        <fieldset><legend>Ideal trend</legend><div class="checks" data-group="trend" data-values="up,down,sideways"></div></fieldset>
+        <fieldset><legend>Ideal trend strength</legend><div class="checks" data-group="trend_strength" data-values="strong,moderate,weak"></div></fieldset>
+        <fieldset><legend>Ideal volatility</legend><div class="checks" data-group="volatility" data-values="low,normal,high,extreme"></div></fieldset>
+        <div>
+          <label for="f-squeeze">Bollinger squeeze</label>
+          <select id="f-squeeze"><option value="any">Doesn't matter</option><option value="true">Needs a squeeze</option><option value="false">Avoid squeezes</option></select>
+        </div>
+        <div class="full"><label for="f-avoid">Avoid when… (one per line)</label><textarea id="f-avoid" rows="3"></textarea></div>
+        <div class="full"><label for="f-risk">Risk notes</label><textarea id="f-risk" rows="2"></textarea></div>
+        <p class="muted small full" style="margin:0">Leaving a condition group empty means "any". Saved strategies are used by the next analysis.</p>
+        <div class="full row"><button type="submit" class="primary" id="f-save">Save strategy</button><button type="button" id="f-cancel">Cancel</button></div>
+      </form>
+    </section>
+
+    <section class="card">
+      <h2>Test</h2>
       <div class="row">
-        <button id="reload">Reload strategy files</button>
         <input id="test-inst" value="NIFTY50" size="12">
         <select id="test-h"><option>1d</option><option>1w</option><option>1m</option></select>
         <button id="test">Run fresh analysis (bypasses cache)</button>

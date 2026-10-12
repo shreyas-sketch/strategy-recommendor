@@ -189,15 +189,17 @@ def _level_match(actual: str, wanted: list[str], scale: list[str]) -> float:
 
 
 def rule_scores(regime: dict, strategies: list[Strategy]) -> list[dict]:
+    """Score each strategy 0-100 against the regime, with a per-dimension breakdown (0, 0.3, 0.5 or 1)."""
     out = []
     for s in strategies:
         c = s.ideal_conditions
-        parts = [
-            1.0 if not c.trend or regime["trend"] in c.trend else 0.0,
-            _level_match(regime["trend_strength"], c.trend_strength, STRENGTH_LEVELS),
-            _level_match(regime["volatility"], c.volatility, VOL_LEVELS),
-        ]
+        breakdown = {
+            "trend": 1.0 if not c.trend or regime["trend"] in c.trend else 0.0,
+            "trend_strength": _level_match(regime["trend_strength"], c.trend_strength, STRENGTH_LEVELS),
+            "volatility": _level_match(regime["volatility"], c.volatility, VOL_LEVELS),
+        }
         if c.squeeze != "any":
-            parts.append(1.0 if bool(c.squeeze) == regime["squeeze"] else 0.3)
-        out.append({"strategy_id": s.id, "rule_score": round(100 * sum(parts) / len(parts))})
+            breakdown["squeeze"] = 1.0 if bool(c.squeeze) == regime["squeeze"] else 0.3
+        out.append({"strategy_id": s.id, "rule_score": round(100 * sum(breakdown.values()) / len(breakdown)),
+                    "breakdown": breakdown})
     return sorted(out, key=lambda x: -x["rule_score"])

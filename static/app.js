@@ -47,6 +47,8 @@ function render({ recommendation: r, snapshot: s, strategies, meta }) {
        <div>${esc(top?.why)}</div>
        <div class="muted small" style="margin-top:6px">Watch out: ${esc(top?.watch_out)}</div>`;
 
+  renderComparison(r, name, noTrade);
+
   const g = s.regime, p = s.primary;
   const stats = [
     ["Trend", g.trend], ["Strength", g.trend_strength], ["Volatility", `${g.volatility} (${g.volatility_score})`],
@@ -61,6 +63,7 @@ function render({ recommendation: r, snapshot: s, strategies, meta }) {
       <div class="bar"><i style="width:${Math.max(0, Math.min(100, a.fit_score))}%"></i></div>
       <div class="small">${esc(a.why)}</div>
       <div class="small muted">Risk: ${esc(a.watch_out)}</div>
+      ${a.vs_top && a.strategy_id !== r.top_strategy_id ? `<div class="small vs">vs top pick: ${esc(a.vs_top)}</div>` : ""}
     </div>`).join("");
   $("reassess").innerHTML = (r.reassess_if || []).map((x) => `<li>${esc(x)}</li>`).join("");
   $("raw").textContent = JSON.stringify(s, null, 2);
@@ -72,6 +75,22 @@ function render({ recommendation: r, snapshot: s, strategies, meta }) {
   $("notice").textContent = meta.note || "";
   $("notice").classList.toggle("hidden", !meta.note);
   $("result").classList.remove("hidden");
+}
+
+function renderComparison(r, name, noTrade) {
+  const factors = r.deciding_factors || [];
+  $("compare-card").classList.toggle("hidden", !r.why_top_over_others && !factors.length);
+  $("compare-title").textContent = noTrade ? "Why no strategy is recommended" : `Why ${name(r.top_strategy_id)} over the others`;
+  $("compare-why").textContent = r.why_top_over_others || "";
+  if (!factors.length) { $("matrix").innerHTML = ""; return; }
+  const ids = r.rankings.map((a) => a.strategy_id);
+  const head = `<tr><th>Market fact</th>${ids.map((id) => `<th class="c ${id === r.top_strategy_id ? "pick" : ""}">${esc(name(id))}</th>`).join("")}</tr>`;
+  const rows = factors.map((f) => `<tr><td>${esc(f.factor)}</td>${ids.map((id) => {
+    const mark = f.favors.includes(id) ? '<span class="yes">✓</span>' : f.hurts.includes(id) ? '<span class="no">✗</span>' : "";
+    return `<td class="c ${id === r.top_strategy_id ? "pick" : ""}">${mark}</td>`;
+  }).join("")}</tr>`).join("");
+  const scores = `<tr><td><b>Fit score</b></td>${r.rankings.map((a) => `<td class="c ${a.strategy_id === r.top_strategy_id ? "pick" : ""}"><b>${a.fit_score}</b></td>`).join("")}</tr>`;
+  $("matrix").innerHTML = head + rows + scores;
 }
 
 init();

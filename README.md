@@ -32,15 +32,33 @@ uvicorn app.main:app --reload
 
 ## Adding your strategies
 
-Copy `config/strategies/_TEMPLATE.yaml` to `config/strategies/<id>.yaml` and fill it in.
-The five files in that folder are **examples**. Replace them with your real logic.
+**From the admin panel:** go to Strategies → **+ Add strategy**, or use Edit / Delete on an
+existing one. Each one is saved as `config/strategies/<id>.yaml` and used by the next analysis.
+Cached results are cleared automatically.
+
+**Or by file:** copy `config/strategies/_TEMPLATE.yaml` to `config/strategies/<id>.yaml`
+and click **Reload from files**. The five files in that folder are **examples**. Replace them with
+your real logic. (Saving a strategy from the panel rewrites its file without YAML comments.)
 
 * `logic`, `avoid_conditions`, `risk_notes`: free text that Claude reads. Be concrete.
 * `ideal_conditions`: machine-readable hints (trend / strength / volatility / squeeze).
   The built-in rule engine uses them as a pre-score and as the fallback.
 * `horizons`: which of 1d / 1w / 1m the strategy is meant for.
 
-After editing, click **Reload strategy files** in the admin panel. No restart is needed.
+No restart is needed either way.
+
+## Why one strategy beats the others
+
+Every recommendation explains the comparison, not just the pick:
+
+* **Why X over the others:** names the runner-up and the numbers that separate them
+  (e.g. "ADX 31 favours trend following; the straddle needs a sideways market").
+* **Deciding-factors table:** the 3–6 market facts that drove the ranking, marked ✓ (helps) or ✗ (hurts)
+  for every strategy, plus each strategy's fit score.
+* **"vs top pick"** on every other strategy: the specific condition it fails that the top pick meets.
+
+When Claude is off (budget rule) or fails, the rule engine produces the same three things from
+each strategy's `ideal_conditions`, and says so honestly when two strategies tie.
 
 ## Admin controls (cost)
 
