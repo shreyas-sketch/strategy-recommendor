@@ -104,4 +104,6 @@ def test_kc_strategies_carry_signal_logic(tmp_path):
     for st in kc:
         assert "Renko" in st.logic and "9 EMA" in st.logic and "Supertrend(ATR 10, multiplier 3)" in st.logic
         assert "set by an external process (logic not included" not in st.logic
+        box = "10 points" if "NIFTY 50" in st.logic.split("Chart:")[1][:40] else "30 points"
+        assert f"box size {box}" in st.logic
 

@@ -13,21 +13,22 @@ description: 'KC Trend ride on NIFTY BANK (intraday), option buying: Renko 9 EMA
   an ATM call in an uptrend and an ATM put in a downtrend; exits when the Renko Supertrend flips or at 15:15.'
 logic: "Style: Directional option buying (trend following) on NIFTY BANK.\nIntraday: everything is closed by 15:15 IST.\n\
   Capital required (per Tradetron): ₹100,000.\n\nKC Trend signal (computed by the external indicator system and passed\
-  \ to Tradetron as key1 / key2;\nlogic supplied by the strategy creator):\n  Chart: Renko bricks of NIFTY BANK (box\
-  \ size not specified), with a 9 EMA and Supertrend(ATR 10, multiplier 3)\n  calculated on the bricks.\n  Up signal\
-  \ (key1 = 1): Supertrend is bullish (green) AND price is above the 9 EMA.\n  Down signal (key2 = 1): Supertrend is\
-  \ bearish (red) AND price is below the 9 EMA.\n  Exit up-side trade (key1 = 2): Supertrend turns bearish. Exit down-side\
-  \ trade (key2 = 2): Supertrend turns bullish.\n  An opposite signal also exits the open trade. No re-entry in the same\
-  \ direction until a new valid signal forms.\n  All positions are closed at 15:15.\n  How it differs from the time-based\
-  \ Supertrend strategies: Renko bricks only form when price moves a full brick,\n  so small sideways noise is ignored\
-  \ and quiet sessions produce few or no signals; the 9 EMA filter delays entry\n  until momentum confirms, and exits\
-  \ wait for the Renko Supertrend to flip (a sizeable move against the trade).\n\nTradetron execution:\nSet 1:\n  Entry\
-  \ when runtime variable 'BANKNIFTY_key1' (set outside this strategy) equals 1.\n    -> BUY 1 lot NIFTY BANK CE ATM\
-  \ (current month expiry, NRML)\n  Exit when runtime variable 'BANKNIFTY_key1' (set outside this strategy) equals 2\
-  \ OR runtime variable 'BANKNIFTY_key2' (set outside this strategy) equals 1.\n\nSet 2:\n  Entry when runtime variable\
-  \ 'BANKNIFTY_key2' (set outside this strategy) equals 1.\n    -> BUY 1 lot NIFTY BANK PE ATM (current month expiry,\
-  \ NRML)\n  Exit when runtime variable 'BANKNIFTY_key2' (set outside this strategy) equals 2 OR runtime variable 'BANKNIFTY_key1'\
-  \ (set outside this strategy) equals 1.\n\nAll sets:\n  Exit everything when the time is at or after 15:15."
+  \ to Tradetron as key1 / key2;\nlogic supplied by the strategy creator):\n  Chart: Renko bricks of NIFTY BANK, box\
+  \ size 30 points (a new brick needs a 30-point move; a reversal needs 60 points), with a 9 EMA and Supertrend(ATR 10,\
+  \ multiplier 3)\n  calculated on the bricks.\n  Up signal (key1 = 1): Supertrend is bullish (green) AND price is above\
+  \ the 9 EMA.\n  Down signal (key2 = 1): Supertrend is bearish (red) AND price is below the 9 EMA.\n  Exit up-side trade\
+  \ (key1 = 2): Supertrend turns bearish. Exit down-side trade (key2 = 2): Supertrend turns bullish.\n  An opposite signal\
+  \ also exits the open trade. No re-entry in the same direction until a new valid signal forms.\n  All positions are\
+  \ closed at 15:15.\n  How it differs from the time-based Supertrend strategies: Renko bricks only form when price moves\
+  \ a full brick,\n  so small sideways noise is ignored and quiet sessions produce few or no signals; the 9 EMA filter\
+  \ delays entry\n  until momentum confirms, and exits wait for the Renko Supertrend to flip (a sizeable move against\
+  \ the trade).\n\nTradetron execution:\nSet 1:\n  Entry when runtime variable 'BANKNIFTY_key1' (set outside this strategy)\
+  \ equals 1.\n    -> BUY 1 lot NIFTY BANK CE ATM (current month expiry, NRML)\n  Exit when runtime variable 'BANKNIFTY_key1'\
+  \ (set outside this strategy) equals 2 OR runtime variable 'BANKNIFTY_key2' (set outside this strategy) equals 1.\n\
+  \nSet 2:\n  Entry when runtime variable 'BANKNIFTY_key2' (set outside this strategy) equals 1.\n    -> BUY 1 lot NIFTY\
+  \ BANK PE ATM (current month expiry, NRML)\n  Exit when runtime variable 'BANKNIFTY_key2' (set outside this strategy)\
+  \ equals 2 OR runtime variable 'BANKNIFTY_key1' (set outside this strategy) equals 1.\n\nAll sets:\n  Exit everything\
+  \ when the time is at or after 15:15."
 ideal_conditions:
   trend:
   - up
