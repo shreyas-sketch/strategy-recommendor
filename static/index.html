@@ -7,53 +7,93 @@
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-<header><div class="wrap"><h1>Strategy Recommender</h1><a href="/admin">Admin</a></div></header>
+<header><div class="wrap">
+  <h1>Strategy Recommender</h1>
+  <div class="row" style="align-items:center"><span class="muted small" id="who"></span><button id="logout">Sign out</button></div>
+</div></header>
 <main class="wrap">
-  <section class="card">
-    <h2>Which strategy should I run?</h2>
-    <div class="row">
-      <div>
-        <label for="instrument">Instrument</label>
-        <input id="instrument" list="instrument-list" value="NIFTY50" size="14" autocomplete="off">
-        <datalist id="instrument-list"></datalist>
-      </div>
-      <div>
-        <label>Horizon</label>
-        <div class="seg" id="horizons"></div>
-      </div>
-      <button class="primary" id="go">Analyze market</button>
+  <nav class="tabs" id="tabs">
+    <button data-tab="today" class="on">Today for me</button>
+    <button data-tab="portfolio">My portfolio</button>
+    <button data-tab="market">Market check</button>
+    <button data-tab="settings">Settings</button>
+  </nav>
+  <div id="error" class="error hidden" style="margin-bottom:16px"></div>
+
+  <!-- Today -->
+  <section id="tab-today">
+    <div id="today-empty" class="card hidden">
+      <h2>Get a recommendation for your portfolio</h2>
+      <p>Upload your holdings in <b>My portfolio</b> and you will get a strategy picked for <i>your</i> stocks every day.
+        Until then, this is based on the market only.</p>
     </div>
-    <p class="muted small">Pick a listed instrument or type any NSE stock symbol (e.g. RELIANCE).</p>
+    <div id="today-loading" class="card muted">Preparing today's recommendation…</div>
+    <div id="today-result"></div>
   </section>
 
-  <div id="error" class="error hidden"></div>
-  <div id="result" class="hidden">
-    <div id="notice" class="notice hidden" style="margin-bottom:16px"></div>
-    <section class="card top" id="top"></section>
-    <section class="card" id="compare-card">
-      <h2 id="compare-title">Why this strategy over the others</h2>
-      <p id="compare-why" style="margin-top:0"></p>
-      <div class="table-scroll"><table class="matrix" id="matrix"></table></div>
-      <p class="muted small" style="margin-bottom:0">✓ condition helps the strategy · ✗ works against it · blank = neutral</p>
-    </section>
+  <!-- Portfolio -->
+  <section id="tab-portfolio" class="hidden">
+    <div class="card">
+      <h2>Upload holdings</h2>
+      <p class="muted small" style="margin-top:0">Upload a holdings export from your broker (.csv or .xlsx) or fill in the
+        <a href="/api/portfolio/template.csv">template CSV</a> (symbol, quantity, avg_price).
+        Only you can see your portfolio. The file itself is not stored — just symbols, quantities and average prices.</p>
+      <div class="row">
+        <input type="file" id="file" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
+        <button class="primary" id="upload">Upload</button>
+      </div>
+    </div>
+    <div class="card hidden" id="holdings-card">
+      <div class="row" style="justify-content:space-between;align-items:center">
+        <h2 style="margin:0">Your holdings</h2>
+        <button class="danger" id="delete-portfolio">Delete portfolio</button>
+      </div>
+      <p class="muted small" id="holdings-meta"></p>
+      <div id="unresolved" class="notice hidden" style="margin-bottom:10px"></div>
+      <div class="table-scroll"><table id="holdings"></table></div>
+    </div>
+  </section>
+
+  <!-- Market -->
+  <section id="tab-market" class="hidden">
     <section class="card">
-      <h2>Market regime</h2>
-      <div class="grid" id="regime"></div>
-      <p id="summary" style="margin:12px 0 0"></p>
+      <h2>Which strategy fits this market?</h2>
+      <div class="row">
+        <div>
+          <label for="instrument">Instrument</label>
+          <input id="instrument" list="instrument-list" value="NIFTY50" size="14" autocomplete="off">
+          <datalist id="instrument-list"></datalist>
+        </div>
+        <div><label>Horizon</label><div class="seg" id="horizons"></div></div>
+        <button class="primary" id="go">Analyze market</button>
+      </div>
+      <p class="muted small">Pick a listed instrument or type any NSE stock symbol (e.g. RELIANCE).</p>
     </section>
-    <section class="card">
-      <h2>All strategies, ranked</h2>
-      <div id="rankings"></div>
-    </section>
-    <section class="card">
-      <h2>Re-check if…</h2>
-      <ul id="reassess"></ul>
-      <details><summary>Raw market numbers</summary><pre id="raw"></pre></details>
-      <p class="muted small" id="meta"></p>
-    </section>
-  </div>
+    <div id="market-result"></div>
+  </section>
+
+  <!-- Settings -->
+  <section id="tab-settings" class="hidden">
+    <div class="card">
+      <h2>Daily WhatsApp message</h2>
+      <label class="switch-row"><input type="checkbox" id="opt-in"> <span id="opt-in-label">Send me today's strategy on WhatsApp</span></label>
+      <p class="muted small" id="opt-in-note"></p>
+    </div>
+    <div class="card">
+      <h2>Change password</h2>
+      <form id="pw-form" class="row">
+        <div><label for="pw-cur">Current password</label><input id="pw-cur" type="password" autocomplete="current-password" required></div>
+        <div><label for="pw-new">New password</label><input id="pw-new" type="password" autocomplete="new-password" minlength="8" required></div>
+        <button class="primary">Update</button>
+      </form>
+      <p class="small" id="pw-msg"></p>
+    </div>
+  </section>
+
   <p class="muted small">Decision support only — not financial advice. Always apply your own risk limits.</p>
 </main>
+<script src="/static/common.js"></script>
+<script src="/static/render.js"></script>
 <script src="/static/app.js"></script>
 </body>
 </html>

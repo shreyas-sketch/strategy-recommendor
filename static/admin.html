@@ -62,9 +62,60 @@
         <div><label for="c1w">1W (min)</label><input id="c1w" type="number" min="0" size="6"></div>
         <div><label for="c1m">1M (min)</label><input id="c1m" type="number" min="0" size="6"></div>
         <div><label for="providers">Data provider order</label><input id="providers" size="28"></div>
+        <div><label for="q-analyses">Fresh analyses / participant / day</label><input id="q-analyses" type="number" min="0" size="6"></div>
+        <div><label for="q-uploads">Uploads / participant / day</label><input id="q-uploads" type="number" min="0" size="6"></div>
         <button class="primary" id="save-budget">Save</button>
       </div>
       <p class="muted small">Re-using results means 100 participants checking NIFTY 50 in the same 15 minutes cost one AI call, not 100.</p>
+    </section>
+
+    <section class="card">
+      <h2>Participants</h2>
+      <form id="add-participant" class="row">
+        <div><label for="p-name">Name</label><input id="p-name" required maxlength="80"></div>
+        <div><label for="p-phone">WhatsApp number</label><input id="p-phone" required placeholder="98XXXXXXXX or 9198XXXXXXXX"></div>
+        <button class="primary">Add &amp; create invite link</button>
+      </form>
+      <details style="margin-top:12px"><summary>Bulk import (CSV)</summary>
+        <p class="muted small">Paste CSV with a header row <code>name,phone</code>. Each participant gets a personal invite link.</p>
+        <textarea id="import-csv" rows="5" placeholder="name,phone&#10;Asha Rao,9876543210"></textarea>
+        <button id="import-btn" style="margin-top:8px">Import</button>
+      </details>
+      <div id="invites" class="hidden" style="margin-top:12px">
+        <div class="notice">Send each link privately (e.g. WhatsApp to that person). Links work once and expire in 7 days. They are shown only now.</div>
+        <div class="table-scroll" style="margin-top:8px"><table id="invite-table"></table></div>
+        <button id="invite-csv" style="margin-top:8px">Download links as CSV</button>
+      </div>
+      <div class="table-scroll" style="margin-top:14px"><table id="participants"></table></div>
+      <p class="muted small">Portfolios are private to each participant — the admin sees only whether one is uploaded and how many holdings it has.</p>
+    </section>
+
+    <section class="card">
+      <h2>Daily WhatsApp notifications (AiSensy)</h2>
+      <div id="notify-status" class="small" style="margin-bottom:10px"></div>
+      <div class="row">
+        <label class="switch-row"><input type="checkbox" id="n-enabled"> Send daily message</label>
+        <div><label for="n-time">Send at (IST)</label><input id="n-time" type="time" required></div>
+        <div><label for="n-lead">Prepare minutes before</label><input id="n-lead" type="number" min="0" max="180" size="5"></div>
+        <label class="switch-row"><input type="checkbox" id="n-weekdays"> Weekdays only</label>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <div><label for="n-campaign">AiSensy API campaign name</label><input id="n-campaign" size="28"></div>
+        <div><label for="n-bench">Benchmark index</label><input id="n-bench" size="12"></div>
+        <div style="flex:1;min-width:220px"><label for="n-holidays">Market holidays (YYYY-MM-DD, one per line)</label><textarea id="n-holidays" rows="2"></textarea></div>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <button class="primary" id="n-save">Save notification settings</button>
+        <input id="n-test-phone" placeholder="Test number" size="16">
+        <button id="n-test">Send test message</button>
+        <button id="n-prepare">Prepare today's picks now</button>
+        <button id="n-send">Send today's messages now</button>
+      </div>
+      <p class="muted small">Template params sent in order: {{1}} first name · {{2}} strategy · {{3}} instrument · {{4}} one-line reason.</p>
+      <details><summary>Delivery log &amp; job runs</summary>
+        <div class="table-scroll"><table id="n-log"></table></div>
+        <div class="table-scroll" style="margin-top:10px"><table id="n-jobs"></table></div>
+      </details>
     </section>
 
     <section class="card">

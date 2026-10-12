@@ -4,17 +4,24 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
+import shutil
 import threading
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Literal
 
 import yaml
 from pydantic import BaseModel, Field
 
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG_DIR = Path(os.environ.get("SR_CONFIG_DIR", ROOT / "config"))
-DATA_DIR = Path(os.environ.get("SR_DATA_DIR", ROOT / "data"))
+# On Railway, attach a volume: RAILWAY_VOLUME_MOUNT_PATH is set automatically and all
+# state (database, admin settings, strategies) lives there and survives redeploys.
+DATA_DIR = Path(os.environ.get("SR_DATA_DIR") or os.environ.get("RAILWAY_VOLUME_MOUNT_PATH") or ROOT / "data")
+IS_PRODUCTION = bool(os.environ.get("RAILWAY_ENVIRONMENT")) or os.environ.get("APP_ENV") == "production"
+
+log = logging.getLogger(__name__)
 
 Horizon = Literal["1d", "1w", "1m"]
 HORIZONS: tuple[Horizon, ...] = ("1d", "1w", "1m")
@@ -51,6 +58,19 @@ class AdminSettings(BaseModel):
     on_budget_exceeded: BudgetAction = "downgrade"
     provider_order: list[str] = ["groww", "twelvedata", "yfinance"]
     cache_minutes: dict[str, int] = {"1d": 15, "1w": 60, "1m": 360}
+    # Fresh (uncached) AI analyses one participant may trigger per day — caps cost abuse.
+    per_user_daily_analyses: int = Field(20, ge=0)
+    # Portfolio uploads per participant per day (each re-upload re-runs their daily analysis).
+    per_user_daily_uploads: int = Field(5, ge=0)
+    # Daily WhatsApp notification (AISensy)
+    notify_enabled: bool = False
+    notify_time: str = Field("06:00", pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    prepare_lead_minutes: int = Field(25, ge=0, le=180)
+    notify_weekdays_only: bool = True
+    market_holidays: list[Annotated[str, Field(pattern=r"^\d{4}-\d{2}-\d{2}$")]] = []  # IST dates, no message
+    aisensy_campaign: str = ""
+    # Index used as the market backdrop for portfolio recommendations.
+    portfolio_benchmark: str = "NIFTY50"
 
 
 class Conditions(BaseModel):
@@ -95,6 +115,7 @@ class Settings:
         self.admin = self._load_admin()
         self.strategies: dict[str, Strategy] = {}
         self._strategy_paths: dict[str, Path] = {}
+        self._seed_strategies()
         self.reload_strategies()
 
     # ---- admin settings -------------------------------------------------
@@ -121,7 +142,16 @@ class Settings:
     # ---- strategies -----------------------------------------------------
     @property
     def strategy_dir(self) -> Path:
-        return self.config_dir / "strategies"
+        # Lives in the data dir so strategies added from the admin panel survive redeploys.
+        return self.data_dir / "strategies"
+
+    def _seed_strategies(self) -> None:
+        if self.strategy_dir.exists():
+            return
+        self.strategy_dir.mkdir(parents=True)
+        for path in (self.config_dir / "strategies").glob("*.y*ml"):
+            shutil.copy2(path, self.strategy_dir / path.name)
+        log.info("seeded strategies into %s", self.strategy_dir)
 
     def reload_strategies(self) -> dict[str, Strategy]:
         found: dict[str, Strategy] = {}

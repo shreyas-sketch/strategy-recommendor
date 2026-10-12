@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 import time
 
 import anthropic
@@ -24,6 +25,33 @@ class BudgetExceeded(RuntimeError):
     pass
 
 
+class QuotaExceeded(RuntimeError):
+    pass
+
+
+def today_ist() -> str:
+    return now_ist().strftime("%Y-%m-%d")
+
+
+class TTLCache:
+    """Small in-process cache for market snapshots shared by all participants (no personal data)."""
+
+    def __init__(self):
+        self._data: dict = {}
+        self._lock = threading.Lock()
+
+    def get(self, key, max_age: float, now: float):
+        with self._lock:
+            hit = self._data.get(key)
+            return hit[1] if hit and now - hit[0] <= max_age else None
+
+    def put(self, key, value, now: float):
+        with self._lock:
+            if len(self._data) > 2000:
+                self._data.clear()
+            self._data[key] = (now, value)
+
+
 class RecommendationService:
     def __init__(self, settings: Settings, store: Store, router: DataRouter | None = None,
                  recommender: ClaudeRecommender | None = None, clock=time.time):
@@ -32,6 +60,7 @@ class RecommendationService:
         self.router = router or DataRouter()
         self.recommender = recommender or ClaudeRecommender()
         self.clock = clock
+        self._snapshots = TTLCache()
 
     # ---- which engine/model runs this request ----------------------------
     def resolve_engine(self) -> dict:
@@ -49,8 +78,58 @@ class RecommendationService:
                 state.update(model=CHEAPEST_MODEL, note="Monthly AI budget reached — downgraded to Haiku 5.5.")
         return state
 
-    # ---- main entry point ------------------------------------------------
-    def recommend(self, instrument_key: str, horizon: Horizon, force_refresh: bool = False) -> dict:
+    # ---- shared market data (cached, not personal) --------------------------
+    def market_snapshot(self, instrument: dict, horizon: Horizon) -> tuple[dict, str]:
+        """Candles -> snapshot for one instrument/horizon, cached in memory for 10 minutes."""
+        key = ("snap", instrument["key"], horizon)
+        now = self.clock()
+        hit = self._snapshots.get(key, 600, now)
+        if hit:
+            return hit
+        order = self.settings.admin.provider_order
+        primary_spec, daily_spec = fetch_specs(horizon, now_ist())
+        primary_df, provider = self.router.fetch(instrument, primary_spec, order)
+        daily_df = None
+        if daily_spec is not None:
+            try:
+                daily_df, _ = self.router.fetch(instrument, daily_spec, order)
+            except Exception as exc:  # daily context is a nice-to-have
+                log.warning("daily context unavailable: %s", exc)
+        result = (build_snapshot(primary_df, daily_df, horizon), provider)
+        self._snapshots.put(key, result, now)
+        return result
+
+    def symbol_daily(self, symbol: str) -> dict | None:
+        """Daily-candle snapshot for one stock (used for portfolio holdings); cached for 6 hours."""
+        key = ("daily", symbol)
+        now = self.clock()
+        hit = self._snapshots.get(key, 6 * 3600, now)
+        if hit is not None:
+            return hit or None
+        try:
+            snap, _ = self.market_snapshot(self.settings.instrument(symbol), "1m")
+        except Exception as exc:
+            log.info("no daily data for a holding: %s", type(exc).__name__)
+            snap = {}
+        self._snapshots.put(key, snap, now)
+        return snap or None
+
+    def call_claude(self, fn, *, label: str, horizon: str, **kwargs) -> tuple[object, dict]:
+        """Run a recommender call on the currently resolved model and record its cost."""
+        engine = self.resolve_engine()
+        if engine["engine"] != "claude":
+            raise _RulesOnly(engine["note"])
+        model = self.settings.models[engine["model"]]
+        rec, usage = fn(model=model, effort=self.settings.admin.effort, **kwargs)
+        cost = model.cost_usd(usage["input_tokens"], usage["output_tokens"],
+                              usage["cache_write_tokens"], usage["cache_read_tokens"])
+        self.store.record_usage(model=model.id, instrument=label, horizon=horizon, cost_usd=cost, **usage)
+        return rec, {"model": model.id, "served_model": usage["served_model"], "cost_usd": round(cost, 5),
+                     "note": engine["note"]}
+
+    # ---- market recommendation --------------------------------------------
+    def recommend(self, instrument_key: str, horizon: Horizon, force_refresh: bool = False,
+                  quota_user: int | None = None) -> dict:
         instrument = self.settings.instrument(instrument_key)
         strategies = self.settings.strategies_for(horizon)
         if not strategies:
@@ -69,15 +148,13 @@ class RecommendationService:
                 hit["meta"]["cache_age_s"] = int(now - hit["meta"]["generated_at"])
                 return hit
 
-        primary_spec, daily_spec = fetch_specs(horizon, now_ist())
-        primary_df, provider = self.router.fetch(instrument, primary_spec, admin.provider_order)
-        daily_df = None
-        if daily_spec is not None:
-            try:
-                daily_df, _ = self.router.fetch(instrument, daily_spec, admin.provider_order)
-            except Exception as exc:  # daily context is a nice-to-have
-                log.warning("daily context unavailable: %s", exc)
-        snapshot = build_snapshot(primary_df, daily_df, horizon)
+        # A cache miss on the AI engine costs money: count it against the participant's daily cap.
+        if (quota_user is not None and engine["engine"] == "claude"
+                and not self.store.take_quota(quota_user, today_ist(), "analysis", admin.per_user_daily_analyses)):
+            raise QuotaExceeded(f"Daily limit of {admin.per_user_daily_analyses} fresh analyses reached. "
+                                "Try an instrument others have checked recently, or come back tomorrow.")
+
+        snapshot, provider = self.market_snapshot(instrument, horizon)
         scores = rule_scores(snapshot["regime"], strategies)
 
         meta = {"instrument": instrument["key"], "instrument_label": instrument["label"],
@@ -87,33 +164,35 @@ class RecommendationService:
 
         recommendation = None
         if engine["engine"] == "claude":
-            model = self.settings.models[engine["model"]]
             try:
-                rec, usage = self.recommender.recommend(
-                    model=model, effort=admin.effort, horizon=horizon, instrument_label=instrument["label"],
+                rec, info = self.call_claude(
+                    self.recommender.recommend, label=instrument["key"], horizon=horizon,
+                    horizon_key=horizon, instrument_label=instrument["label"],
                     strategies=strategies, snapshot=snapshot, rule_scores=scores)
-                cost = model.cost_usd(usage["input_tokens"], usage["output_tokens"],
-                                      usage["cache_write_tokens"], usage["cache_read_tokens"])
-                self.store.record_usage(model=model.id, instrument=instrument["key"], horizon=horizon,
-                                        cost_usd=cost, **usage)
-                meta.update(cost_usd=round(cost, 5), served_model=usage["served_model"],
-                            tokens={k: usage[k] for k in ("input_tokens", "output_tokens",
-                                                          "cache_read_tokens", "cache_write_tokens")})
+                meta.update(cost_usd=info["cost_usd"], served_model=info["served_model"])
                 recommendation = rec.model_dump()
+            except _RulesOnly:
+                pass
             except (anthropic.APIError, RecommendationRefused, RuntimeError) as exc:
-                log.error("Claude call failed, falling back to rules: %s", exc)
+                log.error("Claude call failed, falling back to rules: %s", type(exc).__name__)
                 meta.update(engine="rules", note=f"AI analysis unavailable ({type(exc).__name__}) — showing rule-engine result.")
 
         if recommendation is None:
             recommendation = rules_recommendation(snapshot, scores, strategies)
 
         payload = {"recommendation": recommendation, "snapshot": snapshot, "rule_scores": scores,
-                   "strategies": {s.id: {"name": s.name, "category": s.category, "description": s.description}
-                                  for s in strategies},
-                   "meta": meta}
+                   "strategies": strategy_cards(strategies), "meta": meta}
         if max_age > 0:
             self.store.cache_put(cache_key, payload, now)
         return payload
+
+
+class _RulesOnly(Exception):
+    pass
+
+
+def strategy_cards(strategies) -> dict:
+    return {s.id: {"name": s.name, "category": s.category, "description": s.description} for s in strategies}
 
 
 DIM_LABELS = {"trend": "trend", "trend_strength": "trend strength", "volatility": "volatility", "squeeze": "squeeze"}

@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Set password · Strategy Recommender</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header><div class="wrap"><h1>Strategy Recommender</h1></div></header>
+<main class="wrap narrow">
+  <section class="card">
+    <h2>Welcome! Set your password</h2>
+    <form id="invite-form">
+      <label for="pw1">New password (min 8 characters)</label>
+      <input id="pw1" type="password" autocomplete="new-password" required minlength="8" class="block">
+      <label for="pw2" style="margin-top:12px">Repeat password</label>
+      <input id="pw2" type="password" autocomplete="new-password" required minlength="8" class="block">
+      <div id="error" class="error hidden" style="margin-top:12px"></div>
+      <button class="primary block" style="margin-top:16px">Save and continue</button>
+    </form>
+    <p class="muted small">After this, sign in with your mobile number and this password. This link works only once.</p>
+  </section>
+</main>
+<script src="/static/common.js"></script>
+<script src="/static/invite.js"></script>
+</body>
+</html>

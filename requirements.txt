@@ -1,14 +1,15 @@
-anthropic>=1.13,<2
-fastapi>=0.115
-uvicorn[standard]>=0.30
-pandas>=2.2
-numpy>=2.0
-pyyaml>=6.0
-pydantic>=2.10
-requests>=2.32
-yfinance>=0.2.50
-python-dotenv>=1.0
-
-# dev / tests
-pytest>=8.0
-httpx>=0.27
+# Pinned to the versions the test suite runs against.
+anthropic==1.13.0
+fastapi==0.143.0
+uvicorn[standard]==0.54.0
+pandas==3.0.6
+numpy==2.5.4
+PyYAML==6.0.3
+pydantic==2.14.1
+requests==2.34.2
+yfinance==1.7.0
+python-dotenv==1.2.4
+python-multipart==0.0.32
+openpyxl==3.1.5
+# openpyxl uses defusedxml automatically -> protects Excel uploads from XML attacks
+defusedxml==0.7.1

@@ -10,7 +10,7 @@ function store(k, v) { try { v === undefined ? sessionStorage.removeItem(k) : se
 function load(k) { try { return sessionStorage.getItem(k) || ""; } catch { return ""; } }
 
 async function api(path, opts = {}) {
-  const res = await fetch(path, { ...opts, headers: { "Content-Type": "application/json", "X-Admin-Token": token, ...(opts.headers || {}) } });
+  const res = await fetch(path, { ...opts, headers: { "Content-Type": "application/json", "X-Requested-With": "fetch", "X-Admin-Token": token, ...(opts.headers || {}) } });
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
     const d = body.detail;
@@ -23,7 +23,8 @@ function clearError() { $("error").classList.add("hidden"); }
 
 async function refresh() {
   clearError();
-  const [cfg, usage] = await Promise.all([api("/api/admin/settings"), api("/api/admin/usage"), loadStrategies()]);
+  const [cfg, usage] = await Promise.all([api("/api/admin/settings"), api("/api/admin/usage"), loadStrategies(),
+                                          loadParticipants(), loadNotifications()]);
   const s = cfg.settings;
   selectedModel = s.active_model;
 
@@ -48,6 +49,9 @@ async function refresh() {
   $("c1w").value = s.cache_minutes["1w"] ?? 0;
   $("c1m").value = s.cache_minutes["1m"] ?? 0;
   $("providers").value = s.provider_order.join(", ");
+  $("q-analyses").value = s.per_user_daily_analyses;
+  $("q-uploads").value = s.per_user_daily_uploads;
+  $("n-bench").value = s.portfolio_benchmark;
 
   const budget = usage.budget_usd;
   const pct = budget > 0 ? Math.min(100, (usage.total_usd / budget) * 100) : 0;
@@ -88,7 +92,102 @@ $("save-budget").onclick = (e) => save({
   on_budget_exceeded: $("on-exceeded").value,
   cache_minutes: { "1d": Number($("c1d").value || 0), "1w": Number($("c1w").value || 0), "1m": Number($("c1m").value || 0) },
   provider_order: $("providers").value.split(",").map((x) => x.trim()).filter(Boolean),
+  per_user_daily_analyses: Number($("q-analyses").value || 0),
+  per_user_daily_uploads: Number($("q-uploads").value || 0),
 }, e.target);
+
+// ---- participants ------------------------------------------------------
+let lastInvites = [];
+function showInvites(list) {
+  lastInvites = list;
+  $("invites").classList.toggle("hidden", !list.length);
+  $("invite-table").innerHTML = `<tr><th>Name</th><th>Phone</th><th>Invite link</th></tr>` + list.map((x) =>
+    `<tr><td>${esc(x.name)}</td><td>${esc(x.phone)}</td><td><div class="invite-box">${esc(x.invite_url)}</div></td></tr>`).join("");
+}
+$("invite-csv").onclick = () => {
+  // Quote, and neutralise spreadsheet formulas (=, +, -, @) so the file is safe to open in Excel.
+  const q = (v) => { let t = String(v); if (/^[=+\-@]/.test(t)) t = "'" + t; return `"${t.replace(/"/g, '""')}"`; };
+  const csv = "name,phone,invite_url\n" + lastInvites.map((x) => [x.name, x.phone, x.invite_url].map(q).join(",")).join("\n");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+  a.download = "invite_links.csv"; a.click(); URL.revokeObjectURL(a.href);
+};
+
+async function loadParticipants() {
+  const { participants } = await api("/api/admin/participants");
+  $("participants").innerHTML = `<tr><th>Name</th><th>Phone</th><th>Status</th><th>Portfolio</th><th>WhatsApp</th><th>Last login</th><th></th></tr>` +
+    (participants.length ? participants.map((p) => `<tr>
+      <td>${esc(p.name)}</td><td>${esc(p.phone)}</td>
+      <td>${!p.active ? '<span class="pill avoid">disabled</span>' : p.activated ? '<span class="pill recommended">active</span>' : '<span class="pill conditional">invited</span>'}</td>
+      <td>${p.holdings_count ? `${p.holdings_count} holdings` : '<span class="muted">—</span>'}</td>
+      <td>${p.notify_opt_in ? "opted in" : '<span class="muted">off</span>'}${p.last_notification ? ` <span class="muted small">(${esc(p.last_notification)})</span>` : ""}</td>
+      <td class="small">${esc(p.last_login || "—")}</td>
+      <td class="actions"><button data-invite="${p.id}">New invite</button> <button data-toggle="${p.id}" data-active="${p.active}">${p.active ? "Disable" : "Enable"}</button> <button class="danger" data-remove="${p.id}" data-name="${esc(p.name)}">Delete</button></td>
+    </tr>`).join("") : `<tr><td colspan="7" class="muted">No participants yet.</td></tr>`);
+}
+
+$("add-participant").addEventListener("submit", async (e) => {
+  e.preventDefault(); clearError();
+  try {
+    const r = await api("/api/admin/participants", { method: "POST", body: JSON.stringify({ name: $("p-name").value, phone: $("p-phone").value }) });
+    showInvites([r]); e.target.reset(); await loadParticipants();
+  } catch (err) { showError(err); }
+});
+$("import-btn").onclick = async () => {
+  clearError();
+  try {
+    const r = await api("/api/admin/participants/import", { method: "POST", body: JSON.stringify({ csv_text: $("import-csv").value }) });
+    showInvites(r.created);
+    if (r.errors.length) showError(r.errors.map((x) => `line ${x.line}: ${x.error}`).join("; "));
+    await loadParticipants();
+  } catch (err) { showError(err); }
+};
+$("participants").addEventListener("click", async (e) => {
+  const d = e.target.dataset;
+  try {
+    if (d.invite && confirm("Create a new invite link? Their current password stops working.")) {
+      const r = await api(`/api/admin/participants/${d.invite}/invite`, { method: "POST" });
+      const row = e.target.closest("tr").children;
+      showInvites([{ name: row[0].textContent, phone: row[1].textContent, invite_url: r.invite_url }]);
+    } else if (d.toggle) {
+      await api(`/api/admin/participants/${d.toggle}`, { method: "PATCH", body: JSON.stringify({ active: d.active !== "1" }) });
+    } else if (d.remove && confirm(`Delete ${d.name} and all their data (portfolio, history)? This cannot be undone.`)) {
+      await api(`/api/admin/participants/${d.remove}`, { method: "DELETE" });
+    } else return;
+    await loadParticipants();
+  } catch (err) { showError(err); }
+});
+
+// ---- notifications ------------------------------------------------------
+async function loadNotifications() {
+  const n = await api("/api/admin/notifications");
+  $("n-enabled").checked = n.enabled; $("n-time").value = n.notify_time; $("n-lead").value = n.prepare_lead_minutes;
+  $("n-weekdays").checked = n.weekdays_only; $("n-campaign").value = n.campaign; $("n-holidays").value = n.holidays.join("\n");
+  const warn = !n.aisensy_configured ? "AISENSY_API_KEY is not set on the server. " : !n.campaign ? "Set the AiSensy campaign name. " : "";
+  $("notify-status").innerHTML = `${warn ? `<span class="pill avoid">${esc(warn)}</span> ` : ""}${n.opted_in} participant(s) opted in · ${n.enabled ? `sends daily at ${esc(n.notify_time)} IST` : "currently off"}`;
+  $("n-log").innerHTML = `<tr><th>Time</th><th>Participant</th><th>Status</th><th>Detail</th></tr>` +
+    (n.recent.map((r) => `<tr><td class="small">${esc(new Date(r.ts).toLocaleString())}</td><td>${esc(r.name || "test")}</td><td>${esc(r.status)}</td><td class="small">${esc(r.detail)}</td></tr>`).join("") || `<tr><td colspan="4" class="muted">Nothing sent yet.</td></tr>`);
+  $("n-jobs").innerHTML = `<tr><th>Job</th><th>Day</th><th>Started</th><th>Result</th></tr>` +
+    (n.jobs.map((j) => `<tr><td>${esc(j.kind)}</td><td>${esc(j.day)}</td><td class="small">${esc(j.started)}</td><td class="small">${esc(j.summary || (j.finished ? "" : "running…"))}</td></tr>`).join("") || `<tr><td colspan="4" class="muted">No runs yet.</td></tr>`);
+}
+$("n-save").onclick = (e) => save({
+  notify_enabled: $("n-enabled").checked, notify_time: $("n-time").value, prepare_lead_minutes: Number($("n-lead").value || 0),
+  notify_weekdays_only: $("n-weekdays").checked, aisensy_campaign: $("n-campaign").value.trim(),
+  portfolio_benchmark: $("n-bench").value.trim().toUpperCase() || "NIFTY50",
+  market_holidays: $("n-holidays").value.split(/\s+/).map((x) => x.trim()).filter(Boolean),
+}, e.target);
+$("n-test").onclick = async () => {
+  try { const r = await api("/api/admin/notifications/test", { method: "POST", body: JSON.stringify({ phone: $("n-test-phone").value }) });
+        alert(r.ok ? "Sent. Check the phone." : `Failed: ${r.detail}`); await loadNotifications(); }
+  catch (err) { showError(err); }
+};
+for (const kind of ["prepare", "send"]) {
+  $(`n-${kind}`).onclick = async () => {
+    if (kind === "send" && !confirm("Send today's WhatsApp messages now to everyone opted in who hasn't received one today?")) return;
+    try { await api(`/api/admin/jobs/${kind}/run`, { method: "POST" }); setTimeout(loadNotifications, 3000); alert(`Started: ${kind}. The log updates as it runs.`); }
+    catch (err) { showError(err); }
+  };
+}
 $("reload").onclick = async () => {
   try { await api("/api/admin/strategies/reload", { method: "POST" }); await loadStrategies(); }
   catch (e) { showError(e); }

@@ -8,11 +8,13 @@ import pandas as pd
 import pytest
 
 os.environ["SR_NO_AUTOAPP"] = "1"
+os.environ["COOKIE_SECURE"] = "0"      # TestClient talks plain http
+os.environ.pop("RAILWAY_ENVIRONMENT", None)
 
 from app.config import Settings  # noqa: E402
 from app.data.base import Provider, normalize  # noqa: E402
 from app.data.providers import DataRouter  # noqa: E402
-from app.llm.recommender import Recommendation  # noqa: E402
+from app.llm.recommender import PortfolioRecommendation, Recommendation  # noqa: E402
 from app.service import RecommendationService  # noqa: E402
 from app.store import Store  # noqa: E402
 
@@ -67,8 +69,16 @@ class FakeMessages:
     def parse(self, **kwargs):
         self.parent.calls.append(kwargs)
         ids = [s["id"] for s in self.parent.catalog_from(kwargs)]
-        rec = Recommendation(
-            market_summary="Strong uptrend.", regime="strong up", confidence="high",
+        cls = kwargs["output_format"]
+        extra = {}
+        if cls is PortfolioRecommendation:
+            extra = dict(portfolio_summary="Mostly trending stocks.", run_on="RELIANCE",
+                         why="Holdings trend strongly.", portfolio_risks=["Concentrated"],
+                         whatsapp_line="Your top holdings\nare trending up strongly.")
+        else:
+            extra = dict(regime="strong up")
+        rec = cls(**extra,
+            market_summary="Strong uptrend.", confidence="high",
             top_strategy_id=ids[0],
             why_top_over_others=f"{ids[0]} beats {ids[-1]} because ADX 31 favours trend following.",
             deciding_factors=[{"factor": "ADX 31 — strong trend", "favors": [ids[0], "made_up"], "hurts": ids[1:]}],
@@ -76,7 +86,7 @@ class FakeMessages:
                        "why": "x", "watch_out": "y", "vs_top": f"loses to {ids[0]}"} for k, i in enumerate(ids)] +
                      [{"strategy_id": "made_up", "fit_score": 99, "verdict": "recommended", "why": "",
                        "watch_out": "", "vs_top": ""}],
-            reassess_if=["ADX drops below 20"],
+            **({"reassess_if": ["ADX drops below 20"]} if cls is Recommendation else {}),
         )
         usage = SimpleNamespace(input_tokens=3000, output_tokens=1000,
                                 cache_creation_input_tokens=0, cache_read_input_tokens=0)
@@ -111,3 +121,44 @@ def env(tmp_path, monkeypatch):
                                     recommender=ClaudeRecommender(client))
     settings.update_admin({"provider_order": ["fake"]})
     return SimpleNamespace(settings=settings, service=service, provider=provider, client=client)
+
+
+@pytest.fixture
+def web(env):
+    """HTTP clients: admin(), and participant(name, phone) already signed in."""
+    from fastapi.testclient import TestClient
+
+    from app import auth
+    from app.main import create_app
+    from app.notify import DailyJobs
+    from app.portfolio import PortfolioAdvisor
+
+    class FakeAISensy:
+        configured = True
+
+        def __init__(self):
+            self.sent = []
+
+        def send(self, **kw):
+            self.sent.append(kw)
+            return True, "HTTP 200"
+
+    aisensy = FakeAISensy()
+    jobs = DailyJobs(PortfolioAdvisor(env.service), aisensy, workers=2)
+    app = create_app(env.settings, env.service, jobs=jobs, start_scheduler=False)
+
+    def new_client(**headers):
+        return TestClient(app, headers={"X-Requested-With": "fetch", **headers})
+
+    def participant(name="Asha Rao", phone="9876543210", password="correct-horse-1"):
+        store = env.service.store
+        uid = store.create_user(name, auth.normalize_phone(phone))
+        store.update_user(uid, password_hash=auth.hash_password(password))
+        c = new_client()
+        r = c.post("/api/auth/login", json={"phone": phone, "password": password})
+        assert r.status_code == 200, r.text
+        c.user_id = uid
+        return c
+
+    return SimpleNamespace(app=app, jobs=jobs, aisensy=aisensy, client=new_client,
+                           admin=lambda: new_client(**{"X-Admin-Token": "secret"}), participant=participant)

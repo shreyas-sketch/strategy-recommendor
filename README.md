@@ -1,98 +1,152 @@
 # Strategy Recommender
 
-Looks at the market over a **1-day, 1-week or 1-month** horizon and tells
-participants which of your algo strategies fits current conditions best,
-or tells them to sit out. Claude does the analysis, and the admin can switch
-between **Haiku 5.5, Sonnet 5.5 and Opus 5.5** at any time to control cost.
+Tells each participant which of your algo strategies to run, based on the market
+(1 day / 1 week / 1 month) and on **their own portfolio**. The pick reaches them on
+WhatsApp every trading morning via AiSensy. Claude does the analysis, and the admin
+can switch between **Haiku 5.5, Sonnet 5.5 and Opus 5.5** at any time to control cost.
 
 ```
-candles (Groww / Twelve Data / yfinance)
-   └─► indicators + regime (pandas, deterministic)  ── trend, ADX, volatility pct, squeeze, gaps…
-         └─► rule engine pre-score per strategy
-               └─► Claude (admin-selected model) ranks every strategy  ──► participant UI
-                     ↑ strategy catalog from config/strategies/*.yaml
+candles (Groww / Twelve Data / yfinance) ─► indicators + regime (pandas)
+                                              │
+portfolio upload (CSV/XLSX) ─► holdings ──────┤
+                                              ▼
+                     Claude (admin-selected model) ranks your strategies
+                     + explains why the pick beats each alternative
+                                              │
+                      web app ◄───────────────┴──► 06:00 IST WhatsApp (AiSensy)
 ```
 
-Claude never reads raw candles. All the maths runs in Python, and Claude gets a
-summary of about 1–2k tokens plus your strategy catalog. That keeps each analysis at
-roughly **$0.001 on Haiku, $0.02 on Sonnet and $0.04 on Opus**.
-
-## Quick start
+## Quick start (local)
 
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env          # fill in ANTHROPIC_API_KEY, ADMIN_TOKEN, data keys
+pip install -r requirements-dev.txt
+cp .env.example .env            # fill in ANTHROPIC_API_KEY, ADMIN_TOKEN, …
+echo "COOKIE_SECURE=0" >> .env  # local http only
 uvicorn app.main:app --reload
+pytest                          # 49 tests
 ```
 
-* Participants: http://localhost:8000/
 * Admin: http://localhost:8000/admin (sign in with `ADMIN_TOKEN`)
-* Tests: `pytest`
+* Participants: http://localhost:8000/ (sign in after accepting an invite)
 
-## Adding your strategies
+## Deploy on Railway
 
-**From the admin panel:** go to Strategies → **+ Add strategy**, or use Edit / Delete on an
-existing one. Each one is saved as `config/strategies/<id>.yaml` and used by the next analysis.
-Cached results are cleared automatically.
+1. **New project → Deploy from GitHub repo.** The repo's `Dockerfile` and `railway.json`
+   are picked up automatically, including the health check on `/healthz`.
+2. **Attach a volume** to the service with mount path `/data`. **This is required.** The
+   database (participants, portfolios, usage), admin settings and strategies all live
+   there. Without it, everything is wiped on every redeploy. The app finds the volume
+   through `RAILWAY_VOLUME_MOUNT_PATH`.
+3. **Variables:** `ANTHROPIC_API_KEY`, `ADMIN_TOKEN` (at least 24 random characters, e.g.
+   `python -c "import secrets; print(secrets.token_urlsafe(32))"`), `AISENSY_API_KEY`, and
+   your data keys (`GROWW_API_KEY` + `GROWW_API_SECRET`, `TWELVEDATA_API_KEY`).
+4. **Networking → Generate domain.** Invite links use it automatically
+   (`RAILWAY_PUBLIC_DOMAIN`), or set `PUBLIC_BASE_URL` for a custom domain.
+5. **Keep replicas at 1.** The 6 AM scheduler and SQLite live in the single process.
+   100 participants is far below its capacity, and a database lock also stops duplicate
+   sends.
 
-**Or by file:** copy `config/strategies/_TEMPLATE.yaml` to `config/strategies/<id>.yaml`
-and click **Reload from files**. The five files in that folder are **examples**. Replace them with
-your real logic. (Saving a strategy from the panel rewrites its file without YAML comments.)
+The app refuses to start in production if `ADMIN_TOKEN` is weak, and it logs a loud
+warning if no volume is attached. API docs (`/docs`) are disabled in production.
 
-* `logic`, `avoid_conditions`, `risk_notes`: free text that Claude reads. Be concrete.
-* `ideal_conditions`: machine-readable hints (trend / strength / volatility / squeeze).
-  The built-in rule engine uses them as a pre-score and as the fallback.
-* `horizons`: which of 1d / 1w / 1m the strategy is meant for.
+## Participants and privacy
 
-No restart is needed either way.
+* **Onboarding:** the admin adds participants one by one or by CSV bulk import
+  (`name,phone`). Each gets a personal invite link: one use, expires in 7 days. On it they
+  set a password, then sign in with mobile number + password. "New invite" in the admin
+  panel resets a forgotten password and signs out all of that person's devices.
+* **Isolation:**
+  * Every participant endpoint takes the user from a server-side session.
+  * No endpoint accepts a user id from the browser, so nobody can request someone else's
+    data.
+  * Tests verify that one participant can't read or delete another's portfolio or
+    recommendation.
+* **The admin sees** who has uploaded a portfolio and how many holdings it has, never
+  the holdings themselves.
+* **Claude receives** symbols, weights, prices and P&L percentages only, never names or
+  phone numbers.
+* **Deleting a participant** removes their portfolio, recommendations, sessions and
+  message log.
 
-## Why one strategy beats the others
+Security measures:
 
-Every recommendation explains the comparison, not just the pick:
-
-* **Why X over the others:** names the runner-up and the numbers that separate them
-  (e.g. "ADX 31 favours trend following; the straddle needs a sideways market").
-* **Deciding-factors table:** the 3–6 market facts that drove the ranking, marked ✓ (helps) or ✗ (hurts)
-  for every strategy, plus each strategy's fit score.
-* **"vs top pick"** on every other strategy: the specific condition it fails that the top pick meets.
-
-When Claude is off (budget rule) or fails, the rule engine produces the same three things from
-each strategy's `ideal_conditions`, and says so honestly when two strategies tie.
-
-## Admin controls (cost)
-
-| Control | What it does |
+| Area | Measure |
 |---|---|
-| Model | Haiku 5.5 / Sonnet 5.5 / Opus 5.5. Applies to the next analysis. |
-| Thinking effort | low / medium / high. Lower means fewer tokens. |
-| Monthly budget | USD cap, tracked from real token usage per call. |
-| When budget runs out | switch to Haiku, stop AI and use the rule engine, or block. |
-| Re-use result (min) | Cache per instrument + horizon. 100 participants checking NIFTY in 15 min cost 1 call. |
-| Provider order | Which data source to try first. |
+| Passwords | scrypt-hashed |
+| Sessions | random, stored hashed; HttpOnly + Secure + SameSite cookies, expire after 14 days |
+| Brute force | login rate-limited per IP and per phone number |
+| CSRF | header check on every state-changing request |
+| Headers | strict CSP, no framing, `no-store` on API responses |
+| Uploads | 2 MB request limit; files parsed in memory, never stored; XML-attack-safe Excel parsing |
+| Cost abuse | per-participant daily caps on fresh AI analyses and uploads |
 
-Usage and cost per call are logged in `data/app.db` and shown in the admin panel.
-Model prices are in `config/settings.yaml`. Update them there if pricing changes.
+## Portfolio → today's strategy
+
+Participants upload a broker holdings export (.csv or .xlsx), or fill in the template
+CSV (`symbol,quantity,avg_price`).
+* **Symbols:** common broker column names are recognised.
+* **Company names:** exports that list names + ISIN (e.g. Groww) are matched through
+  Groww's public instrument list.
+* **Unmatched rows** are shown to the participant, never silently dropped.
+
+Each morning the app:
+1. takes their 15 largest holdings,
+2. measures trend, volatility, 1-month return and P&L for each,
+3. combines that with the benchmark index regime (default NIFTY 50),
+4. asks Claude which strategy to run today and on what (the index or a specific
+   holding), with the same "why this over the others" comparison as the market tool.
+
+Participants without a portfolio get the market-only recommendation.
+
+## Daily WhatsApp at 06:00 IST (AiSensy)
+
+1. In AiSensy, create a WhatsApp template, for example:
+   `Good morning {{1}}! Today's suggested strategy: {{2}} on {{3}}. {{4}} Open the app for the full analysis.`
+   Get it approved, then create an **API campaign** using it and set it **Live**.
+2. In Admin → Daily WhatsApp notifications:
+   * enter the campaign name, then **Send test message** to your own number;
+   * tick **Send daily message**, set the time, weekdays only, and NSE holidays.
+3. Participants opt in under Settings. Only opted-in, active participants get messages.
+
+How it runs:
+* Picks are prepared 25 minutes before send time, so 100 Claude calls aren't squeezed
+  into one minute.
+* Each participant gets at most one message per day.
+* If the app was down at 6 AM, it won't send late messages after 8 AM.
+* "Prepare / Send now" buttons and a delivery log are in the admin panel.
+
+Template params are sent as: `[first name, strategy name, instrument, one-line reason]`,
+with numbers as `91XXXXXXXXXX`. Check the first test send against your AiSensy account.
+
+## Costs (approx.)
+
+| | Haiku 5.5 | Sonnet 5.5 | Opus 5.5 |
+|---|---|---|---|
+| Per analysis | ~$0.001 | ~$0.02 | ~$0.04 |
+| 100 daily portfolio picks × 22 trading days | ~$2/month | ~$45/month | ~$90/month |
+
+Market-tool results are shared across participants for 15–360 minutes. A monthly budget
+can auto-downgrade to Haiku, switch to the free rule engine, or block. Model prices are in
+`config/settings.yaml`.
+
+## Strategies
+
+Manage them in Admin → Strategies (stored on the volume as YAML), or copy
+`config/strategies/_TEMPLATE.yaml`. The five shipped strategies are **examples** and are
+seeded on first start. Replace them with your real logic. `logic`, `avoid_conditions` and
+`risk_notes` are read by Claude. `ideal_conditions` drive the rule-engine pre-score and
+the fallback.
 
 ## Market data
 
 | Provider | Key | Notes |
 |---|---|---|
-| **Groww** | `GROWW_ACCESS_TOKEN`, or `GROWW_API_KEY` + `GROWW_API_SECRET` | Best for NSE/BSE: exchange-grade, intraday candles. Default first choice. The app mints the daily token itself from key + secret. |
-| **Twelve Data** | `TWELVEDATA_API_KEY` | Good backup. Free plan: 8 req/min, and Indian indices may need a paid plan. |
-| **yfinance** | none | Free last-resort fallback. Unofficial and can lag about 15 min. Fine for 1w / 1m. |
+| **Groww** | `GROWW_ACCESS_TOKEN`, or `GROWW_API_KEY` + `GROWW_API_SECRET` | Best for NSE/BSE. The app mints the daily token from key + secret. |
+| **Twelve Data** | `TWELVEDATA_API_KEY` | Backup. Free plan: 8 req/min, which is too slow for many portfolios. |
+| **yfinance** | none | Free last resort. Unofficial and delayed. |
 
-Providers without keys are skipped. If one fails, the next is tried.
-Instrument symbols for each provider live in `config/settings.yaml`. **Check the index
-symbols against your Groww / Twelve Data accounts.** Plain NSE stocks (e.g. `RELIANCE`) are
-mapped automatically.
-
-## Reliability
-
-* Claude's output is schema-validated (structured outputs). Unknown strategy ids are dropped
-  and missing ones are filled from the rule engine.
-* On Sonnet / Opus, the server-side refusal fallback (`fallbacks: "default"`) is enabled.
-  If Claude errors or declines, the participant gets the rule-engine result with a notice.
-* Only the admin can bypass the cache ("Run fresh analysis").
+Check the index symbols in `config/settings.yaml` against your Groww / Twelve Data
+accounts.
 
 *Decision support only. Not financial advice.*
