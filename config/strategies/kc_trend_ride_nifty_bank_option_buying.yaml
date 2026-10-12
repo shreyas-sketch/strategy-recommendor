@@ -1,7 +1,6 @@
 # Imported from Tradetron export "KC Trend ride Nifty Bank option buying intraday".
-# Ideal conditions were suggested from the strategy's structure — review them.
-# ACTION NEEDED: entries come from runtime variables BANKNIFTY_key1 / BANKNIFTY_key2 set outside this
-# export. Add what sets them (e.g. the Keltner Channel rule) to `logic` so the recommender can judge it.
+# Ideal conditions set from the creator's description of the KC Trend signal.
+# KC Trend signal logic (Renko 9 EMA + Supertrend 10,3) supplied by the strategy creator.
 id: kc_trend_ride_nifty_bank_option_buying
 name: KC Trend ride Nifty Bank option buying intraday
 category: trend
@@ -10,17 +9,25 @@ instruments:
 horizons:
 - 1d
 - 1w
-description: 'Directional ATM option buying on NIFTY BANK (intraday): buys an ATM call or put when the external Keltner
-  Channel trend signal fires; exits on the opposite signal or at 15:15.'
+description: 'KC Trend ride on NIFTY BANK (intraday), option buying: Renko 9 EMA + Supertrend(10,3) trend signal — buys
+  an ATM call in an uptrend and an ATM put in a downtrend; exits when the Renko Supertrend flips or at 15:15.'
 logic: "Style: Directional option buying (trend following) on NIFTY BANK.\nIntraday: everything is closed by 15:15 IST.\n\
-  Capital required (per Tradetron): ₹100,000.\nSignals come from runtime variables BANKNIFTY_key1, BANKNIFTY_key2 that\
-  \ are set by an external process (logic not included in the export).\n\nSet 1:\n  Entry when runtime variable 'BANKNIFTY_key1'\
-  \ (set outside this strategy) equals 1.\n    -> BUY 1 lot NIFTY BANK CE ATM (current month expiry, NRML)\n  Exit when\
-  \ runtime variable 'BANKNIFTY_key1' (set outside this strategy) equals 2 OR runtime variable 'BANKNIFTY_key2' (set\
-  \ outside this strategy) equals 1.\n\nSet 2:\n  Entry when runtime variable 'BANKNIFTY_key2' (set outside this strategy)\
-  \ equals 1.\n    -> BUY 1 lot NIFTY BANK PE ATM (current month expiry, NRML)\n  Exit when runtime variable 'BANKNIFTY_key2'\
-  \ (set outside this strategy) equals 2 OR runtime variable 'BANKNIFTY_key1' (set outside this strategy) equals 1.\n\
-  \nAll sets:\n  Exit everything when the time is at or after 15:15."
+  Capital required (per Tradetron): ₹100,000.\n\nKC Trend signal (computed by the external indicator system and passed\
+  \ to Tradetron as key1 / key2;\nlogic supplied by the strategy creator):\n  Chart: Renko bricks of NIFTY BANK (box\
+  \ size not specified), with a 9 EMA and Supertrend(ATR 10, multiplier 3)\n  calculated on the bricks.\n  Up signal\
+  \ (key1 = 1): Supertrend is bullish (green) AND price is above the 9 EMA.\n  Down signal (key2 = 1): Supertrend is\
+  \ bearish (red) AND price is below the 9 EMA.\n  Exit up-side trade (key1 = 2): Supertrend turns bearish. Exit down-side\
+  \ trade (key2 = 2): Supertrend turns bullish.\n  An opposite signal also exits the open trade. No re-entry in the same\
+  \ direction until a new valid signal forms.\n  All positions are closed at 15:15.\n  How it differs from the time-based\
+  \ Supertrend strategies: Renko bricks only form when price moves a full brick,\n  so small sideways noise is ignored\
+  \ and quiet sessions produce few or no signals; the 9 EMA filter delays entry\n  until momentum confirms, and exits\
+  \ wait for the Renko Supertrend to flip (a sizeable move against the trade).\n\nTradetron execution:\nSet 1:\n  Entry\
+  \ when runtime variable 'BANKNIFTY_key1' (set outside this strategy) equals 1.\n    -> BUY 1 lot NIFTY BANK CE ATM\
+  \ (current month expiry, NRML)\n  Exit when runtime variable 'BANKNIFTY_key1' (set outside this strategy) equals 2\
+  \ OR runtime variable 'BANKNIFTY_key2' (set outside this strategy) equals 1.\n\nSet 2:\n  Entry when runtime variable\
+  \ 'BANKNIFTY_key2' (set outside this strategy) equals 1.\n    -> BUY 1 lot NIFTY BANK PE ATM (current month expiry,\
+  \ NRML)\n  Exit when runtime variable 'BANKNIFTY_key2' (set outside this strategy) equals 2 OR runtime variable 'BANKNIFTY_key1'\
+  \ (set outside this strategy) equals 1.\n\nAll sets:\n  Exit everything when the time is at or after 15:15."
 ideal_conditions:
   trend:
   - up
@@ -33,9 +40,11 @@ ideal_conditions:
   - high
   squeeze: any
 avoid_conditions:
-- Sideways, choppy sessions — repeated whipsaws and premium decay
-- Very low volatility — option premiums barely move
-risk_notes: Bought options lose value through time decay; whipsaws in a range cause a string of small losses.
+- Sideways, low-volatility sessions — few Renko bricks form, and bought premium decays while waiting
+- Choppy ranges a few bricks wide — the Renko Supertrend flips back and forth
+- Gap-and-reverse days — the late, confirmed entry buys near the end of the move
+risk_notes: 'Bought ATM options: loss per trade is limited to the premium, but time decay and late entries after confirmation
+  erode it on slow or reversing days.'
 underlyings:
 - BANKNIFTY
 active_days: any

@@ -1,0 +1,48 @@
+{
+ "atm_roll_aggressive_diversified_kapoor.yaml": [
+  "1069e7b0fdf8b6f7588523e42334077c2e450f1b2485e35b2c94d75928f22c5c",
+  "37a49c6dd3a7133279b75777496018c521220b5b73f57e8063207c9ad1565a16",
+  "dfd711831020c8ef901605503b37762ff4b64ec112cd6c1c37019171817cf7bc",
+  "e34998b0b29d56142eab266347c475b5e17fb5183a22ec72b00b6c178e16d001",
+  "f3e6e13bce51b1e655bccf891d61df92bb4b567b838942ac54cfb058c597f084"
+ ],
+ "banknifty_3_min_st_intraday_sl.yaml": [
+  "008a8d47fa7f1f9a388c904b719f9a45ec3849588d4f0574e559cc67d41ce976"
+ ],
+ "banknifty_supertrend_intraday_5_min.yaml": [
+  "1849d77ed59cbdf96a6a5f63f664c5fd553e6d3d9e5360afaf14433502de7ab9",
+  "b3041b11bd6e359da8f42974d7a2d29eab88273e9c72014a0512a8678556f329",
+  "eeb949259cdd0d3bd78db2b970b0bd823341d70ad3f8ce453ac27cf62d95bdfd"
+ ],
+ "bnf_15_min_super_trend_intraday_instant.yaml": [
+  "21d8737cf8c60caa6b48c43c98d5bd1767cfec1daf7927fba42801ec48ff342b",
+  "2eb71ff3f72522bebc7975b7ff500e81f28a6f4ea93fa0dbea6053446a8406e7",
+  "46e243d8c7a54d341856c03ee3eecd9ee2876814ac8816c505993bee834e8ab0",
+  "a54d391e8927e9d39dd83cdd2b074153d4e26b8f341b4f6e13bf865b5d92266e"
+ ],
+ "kc_trend_ride_nifty_50_option_buying.yaml": [
+  "1bff5788ce2518f4c16776beb6f3735e5a394189fa38bc5a821300eb5dd9da88",
+  "fa073b5b8a569c59fcc79537a2e710fd5d1105dabfc62af75339359ab5afa17b"
+ ],
+ "kc_trend_ride_nifty_50_option_selling.yaml": [
+  "3bc45aa74fd71380324bd5a9c032bb3232256b50bc7f13860a72aa415677210f",
+  "abaeb1a8375e045f1718d9651473aec26ae0ebcf1c4a5d009b11b4480c408e6b"
+ ],
+ "kc_trend_ride_nifty_bank_option_buying.yaml": [
+  "9a3ca17b3837ee03a8b9250bf6406b2730c04f69c5c7307dbe47a6f02f97d10d",
+  "daac10e43074ee049285c972f0ec1bd57f2435a64184d7cbb3a72da9ea4c9c7b"
+ ],
+ "kc_trend_ride_nifty_bank_option_selling.yaml": [
+  "9384b306f2ad969209acac6e15b5baf6010ef440ff828c36445981312c568bf8",
+  "9f829de40455d239b022c2948bb88aaa3a26eae7a7d6eafa1efe7b3803dc20f7",
+  "b202dbc5674058b97a6b2305d2a0a8d17ad77efd98612865c1bb9893884fd8b9",
+  "e9b224edcc63dcc19d1fafb7e4dcfa261cfa86a8ed76662c20e3fd873c5352fe",
+  "ffbd61ac38ab6f5fcc717263a0a41c6f10c8602dfa5952d4e72cb27adb2e1f39"
+ ],
+ "nifty_3_min_st_intraday.yaml": [
+  "1b80dec944ab69fd543b8e52ad7ae77d18ed5f1c81652fc975dfe9d4b8afd267"
+ ],
+ "nifty_supertrend_intraday_5_min_selling.yaml": [
+  "9422cded08754d708dfcc10bd3b2ba3399d1731964832fd76f0490a647afc877"
+ ]
+}

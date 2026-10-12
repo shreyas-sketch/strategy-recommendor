@@ -233,13 +233,18 @@ Ten Tradetron strategies ship with the app:
 | KC Trend ride Nifty 50 buying | NIFTY 50 | directional ATM buying |
 | KC Trend ride Nifty 50 selling | NIFTY 50 | directional ATM selling |
 
-The four KC strategies take their signals from runtime variables set outside Tradetron's
-export. Add the Keltner Channel rule to their Logic in the admin panel.
+The four KC strategies get their signals (`key1` / `key2`) from an external indicator: Renko
+bricks with a 9 EMA and Supertrend(10, 3). Up = Supertrend green and price above the EMA;
+down = Supertrend red and price below the EMA; exit when the Supertrend flips. This rule
+is written into their Logic.
 
 Each shipped file is added to the volume **once**:
 * A fresh deployment gets all of them.
 * A newly shipped strategy also appears on an existing deployment at the next deploy.
 * A strategy you deleted or edited in the admin panel is never brought back or overwritten.
+* When a shipped strategy is improved (e.g. the KC signal logic), copies you haven't edited
+  are updated at the next deploy. After editing a file in `config/strategies/`, run
+  `python tools/update_shipped_history.py` so this keeps working.
 
 This is tracked in `strategies/.seeded.json` on the volume. The earlier generic examples
 are in `config/strategies/examples/` (not loaded).

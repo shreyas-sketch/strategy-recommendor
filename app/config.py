@@ -154,7 +154,9 @@ class Settings:
 
     def _seed_strategies(self) -> None:
         """Copy shipped strategies into the data dir. Each shipped file is added once: new ones also
-        reach existing deployments, but a strategy the admin deleted is not brought back."""
+        reach existing deployments, but a strategy the admin deleted is not brought back.
+        A shipped file that changed replaces the volume copy only while that copy is byte-identical to
+        an earlier shipped version (config/strategies/.shipped_history.json) — admin edits are kept."""
         fresh = not self.strategy_dir.exists()
         self.strategy_dir.mkdir(parents=True, exist_ok=True)
         manifest = self.strategy_dir / ".seeded.json"
@@ -170,9 +172,20 @@ class Settings:
                 existing_ids.add((yaml.safe_load(path.read_text()) or {}).get("id"))
             except (OSError, yaml.YAMLError):
                 pass
-        added = []
+        history_path = self.config_dir / "strategies" / ".shipped_history.json"
+        try:
+            history = json.loads(history_path.read_text()) if history_path.exists() else {}
+        except (OSError, ValueError):
+            history = {}
+        added, updated = [], []
         for path in sorted((self.config_dir / "strategies").glob("*.y*ml")):
             if path.name in seeded:
+                dest = self.strategy_dir / path.name
+                if not path.name.startswith("_") and dest.exists():
+                    current, shipped = dest.read_bytes(), path.read_bytes()
+                    if current != shipped and hashlib.sha256(current).hexdigest() in history.get(path.name, ()):
+                        shutil.copy2(path, dest)
+                        updated.append(path.name)
                 continue
             seeded.add(path.name)
             sid = (yaml.safe_load(path.read_text()) or {}).get("id")
@@ -182,6 +195,8 @@ class Settings:
         manifest.write_text(json.dumps(sorted(seeded), indent=1))
         if added:
             log.info("added shipped strategies to %s: %s", self.strategy_dir, ", ".join(added))
+        if updated:
+            log.info("updated unedited shipped strategies: %s", ", ".join(updated))
 
     def reload_strategies(self) -> dict[str, Strategy]:
         found: dict[str, Strategy] = {}
