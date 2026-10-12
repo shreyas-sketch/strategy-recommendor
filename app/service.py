@@ -34,6 +34,28 @@ def today_ist() -> str:
     return now_ist().strftime("%Y-%m-%d")
 
 
+MARKET_CLOSE = (15, 30)
+
+
+def trading_day(holidays=(), now=None):
+    """The session a 1-day pick is for: today until the 15:30 IST close on a trading day, otherwise
+    the next weekday that isn't a listed holiday (so an evening run is for tomorrow's session)."""
+    from datetime import timedelta
+    now = now or now_ist()
+    day = now.date()
+    holidays = set(holidays)
+
+    def open_on(d):
+        return d.weekday() < 5 and d.isoformat() not in holidays
+
+    if open_on(day) and (now.hour, now.minute) < MARKET_CLOSE:
+        return day
+    day += timedelta(days=1)
+    while not open_on(day):
+        day += timedelta(days=1)
+    return day
+
+
 class TTLCache:
     """Small in-process cache for market snapshots shared by all participants (no personal data)."""
 
@@ -142,10 +164,11 @@ class RecommendationService:
                              f"Analyse one of: {', '.join(traded) or 'none configured'}")
         # Intraday horizon: strategies pinned to expiry days only count on the days they actually trade.
         schedule_excluded = []
+        target = trading_day(self.settings.admin.market_holidays)
         if horizon == "1d":
             keep = []
             for s in strategies:
-                why = schedule_check(s, self.calendar)
+                why = schedule_check(s, self.calendar, target)
                 if why:
                     schedule_excluded.append({"strategy_id": s.id, "reasons": [why], "kind": "schedule"})
                 else:
@@ -155,7 +178,7 @@ class RecommendationService:
         admin = self.settings.admin
 
         cache_key = "|".join([RESULT_SCHEMA, instrument["key"], horizon, engine["engine"], engine["model"] or "-",
-                              admin.effort, self.settings.catalog_hash(), today_ist(),
+                              admin.effort, self.settings.catalog_hash(), target.isoformat(),
                               ",".join(sorted(e["strategy_id"] for e in schedule_excluded))])
         max_age = 60 * admin.cache_minutes.get(horizon, 0)
         now = self.clock()
@@ -174,8 +197,10 @@ class RecommendationService:
 
         snapshot, provider = self.market_snapshot(instrument, horizon)
         if self.calendar is not None and instrument.get("fno") and horizon in ("1d", "1w"):
-            expiry = self.calendar.info(instrument["key"])
+            expiry = self.calendar.info(instrument["key"], target)
             snapshot = {**snapshot, "expiry": expiry or "unavailable"}
+        if horizon == "1d":
+            snapshot = {**snapshot, "for_trading_day": {"date": target.isoformat(), "weekday": target.strftime("%A")}}
         cards = strategy_cards(all_for_horizon)
         if not strategies:
             rec = {"market_summary": "", "regime": snapshot["regime"]["label"], "confidence": "high",
@@ -184,12 +209,13 @@ class RecommendationService:
                    "excluded": schedule_excluded}
             return {"recommendation": rec, "snapshot": snapshot, "rule_scores": [], "strategies": cards,
                     "meta": {"instrument": instrument["key"], "instrument_label": instrument["label"],
-                             "horizon": horizon, "data_provider": provider, "engine": "rules", "model": None,
+                             "trading_day": target.isoformat(), "horizon": horizon, "data_provider": provider, "engine": "rules", "model": None,
                              "effort": admin.effort, "note": None, "cost_usd": 0.0, "cached": False,
                              "generated_at": now}}
         scores = rule_scores(snapshot["regime"], strategies)
 
         meta = {"instrument": instrument["key"], "instrument_label": instrument["label"],
+                "trading_day": target.isoformat() if horizon == "1d" else None,
                 "horizon": horizon, "data_provider": provider, "engine": engine["engine"],
                 "model": engine["model"], "effort": admin.effort, "note": engine["note"],
                 "cost_usd": 0.0, "cached": False, "generated_at": now}

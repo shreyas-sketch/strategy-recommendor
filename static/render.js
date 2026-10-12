@@ -5,7 +5,9 @@ function recHTML(payload, { personal = false } = {}) {
   const name = (id) => strategies[id]?.name || id;
   const noTrade = r.top_strategy_id === "NO_TRADE";
   const top = r.rankings.find((x) => x.strategy_id === r.top_strategy_id);
-  const scope = personal ? `For you · ${esc(meta.day)}` : `${esc(meta.instrument_label)} · ${esc(meta.horizon)}`;
+  const forDay = (d) => d ? new Date(d + "T00:00:00").toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" }) : "";
+  const scope = personal ? `For you · trading on ${esc(forDay(meta.day))}`
+    : `${esc(meta.instrument_label)} · ${esc(meta.horizon)}${meta.trading_day ? ` · for trading on ${esc(forDay(meta.trading_day))}` : ""}`;
 
   const notice = meta.note ? `<div class="notice" style="margin-bottom:16px">${esc(meta.note)}</div>` : "";
   const topCard = noTrade

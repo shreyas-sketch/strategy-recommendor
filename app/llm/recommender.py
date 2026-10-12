@@ -96,7 +96,7 @@ Strategy catalog:
 {catalog}"""
 
 HORIZON_TEXT = {
-    "1d": "the participant will run the strategy for the next trading DAY (intraday).",
+    "1d": "the participant will run the strategy for ONE trading session (intraday) — the date is in the snapshot's for_trading_day; the candles end at the latest available bar, which may be the previous session's close.",
     "1w": "the participant will run the strategy for the next trading WEEK.",
     "1m": "the participant will run the strategy for the next trading MONTH.",
 }
@@ -124,8 +124,8 @@ Each morning a participant asks: "Which ONE of the platform's strategies should 
 How to decide:
 - Use ONLY the numbers provided. Do not invent news, events, expiry dates you were not given, or prices.
 - Each strategy trades the index listed in its "underlyings". Judge it on THAT index's regime in underlying_markets — never on a different index. A strategy with no underlyings is generic: judge it on the benchmark.
-- expiry_calendar gives each index's next expiry from the exchange calendar (days to expiry, whether today is expiry day or the day before, weekly vs monthly). Strategies that do not trade today were already removed. Weigh expiry effects for option strategies: expiry day = fast premium decay and sharp late moves; near expiry = high gamma.
-- Read each strategy's logic carefully: option buying needs movement and suffers from time decay in ranges; option selling and straddles profit from calm or decaying premium and suffer on trending or volatile days; note day-of-week or expiry-day conditions (today's date and weekday are given) and say so if a strategy may not trigger today.
+- expiry_calendar gives each index's next expiry as seen from trading_day (days to expiry, whether that day is expiry day or the day before, weekly vs monthly). Strategies that do not trade that day were already removed. Market data runs up to the latest candle, which may be the previous session's close. Weigh expiry effects for option strategies: expiry day = fast premium decay and sharp late moves; near expiry = high gamma.
+- Read each strategy's logic carefully: option buying needs movement and suffers from time decay in ranges; option selling and straddles profit from calm or decaying premium and suffer on trending or volatile days; note day-of-week or expiry-day conditions (trading_day gives the session this pick is for) and say so if a strategy may not trigger that day.
 - If a portfolio is provided, also weigh it: concentration, how much is trending up/down or sideways, volatility of the largest holdings, unrealised profit or loss (e.g. a portfolio heavy in falling stocks may call for a strategy that profits from or offsets downside). If portfolio is null, decide on the markets and the profile only.
 - run_on: the index (or holding symbol) the strategy will trade — normally its underlying.
 - The rule_score is a simple pre-computed match on each strategy's own underlying; use it as a hint and override it when the detailed numbers or the strategy logic disagree.

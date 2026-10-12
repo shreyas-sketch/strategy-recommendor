@@ -24,7 +24,7 @@ pip install -r requirements-dev.txt
 cp .env.example .env            # fill in ANTHROPIC_API_KEY, ADMIN_TOKEN, …
 echo "COOKIE_SECURE=0" >> .env  # local http only
 uvicorn app.main:app --reload
-pytest                          # 102 tests
+pytest                          # 105 tests
 ```
 
 * Admin: http://localhost:8000/admin (sign in with `ADMIN_TOKEN`)
@@ -217,6 +217,17 @@ strategies are judged on Bank Nifty, and the NIFTY/SENSEX straddle on both index
   gives Claude today's date and weekday (for expiry-day strategies).
 * **Market check:** for an instrument, ranks only the strategies that trade it, plus
   generic ones.
+
+### Which day a 1-day pick is for
+
+A 1-day pick is for one trading session.
+* **Before the 15:30 IST close on a trading day,** it's for today.
+* **After the close, on weekends and on holidays** from the admin list, it's for the next
+  trading session. The candles then end at the latest close.
+* **What follows that day:** expiry-day checks, the date Claude is told, the cache, and the
+  label on screen ("for trading on Tue, 13 Oct").
+* **The 06:00 WhatsApp pick** is for that day's session. A participant who opens My pick
+  the evening before gets the same pick, prepared once and reused at 06:00.
 
 ### Expiry calendar (Groww)
 

@@ -32,11 +32,20 @@ def clock(d):
     return lambda: datetime.fromisoformat(d).replace(hour=6, tzinfo=IST)
 
 
+def pin_trading_day(monkeypatch, day):
+    import app.portfolio
+    import app.service
+    d = date.fromisoformat(day)
+    monkeypatch.setattr(app.service, "trading_day", lambda holidays=(), now=None: d)
+    monkeypatch.setattr(app.portfolio, "trading_day", lambda holidays=(), now=None: d)
+
+
 @pytest.fixture
-def cal(env):
+def cal(env, monkeypatch):
     groww = FakeGroww()
     c = ExpiryCalendar(env.settings, groww=groww, clock=clock("2026-10-16"))
     env.service.calendar = c
+    pin_trading_day(monkeypatch, "2026-10-16")
     return c
 
 
@@ -99,9 +108,10 @@ def test_daily_pick_drops_strategy_on_non_trading_day(env, web, cal):
     assert '"expiry_calendar"' in msg and '"is_day_before_expiry"' in msg
 
 
-def test_daily_pick_keeps_strategy_on_expiry_day(env, web):
+def test_daily_pick_keeps_strategy_on_expiry_day(env, web, monkeypatch):
     _install(web)
     env.service.calendar = ExpiryCalendar(env.settings, groww=FakeGroww(), clock=clock("2026-10-19"))
+    pin_trading_day(monkeypatch, "2026-10-19")
     c = web.participant()
     c.put("/api/me/profile", json=PRO)
     rec = c.get("/api/me/today").json()["recommendation"]
@@ -159,3 +169,28 @@ def test_run_on_forced_to_strategys_index(env, web, cal):
     c.post("/api/portfolio", files={"file": ("p.csv", b"symbol,quantity\nRELIANCE,10\n", "text/csv")})
     rec = c.get("/api/me/today").json()["recommendation"]      # fake model says run_on="RELIANCE"
     assert rec["top_strategy_id"].startswith(("bnf_", "kc_")) and rec["run_on"] == "NIFTY BANK"
+
+
+def test_trading_day_rules():
+    from app.service import trading_day
+    at = lambda s: datetime.fromisoformat(s).replace(tzinfo=IST)
+    assert trading_day(now=at("2026-10-13T10:00")) == date(2026, 10, 13)     # Tue, market hours -> today
+    assert trading_day(now=at("2026-10-13T08:00")) == date(2026, 10, 13)     # before open -> today
+    assert trading_day(now=at("2026-10-13T15:45")) == date(2026, 10, 14)     # after close -> tomorrow
+    assert trading_day(now=at("2026-10-16T18:00")) == date(2026, 10, 19)     # Friday evening -> Monday
+    assert trading_day(now=at("2026-10-17T11:00")) == date(2026, 10, 19)     # Saturday -> Monday
+    assert trading_day(["2026-10-19"], now=at("2026-10-16T18:00")) == date(2026, 10, 20)   # holiday skipped
+
+
+def test_evening_run_is_for_next_session(env, web, monkeypatch):
+    """Thursday evening on a SENSEX expiry: the pick is for Friday, when ATM Roll won't trade."""
+    import app.service
+    _install(web)
+    thu_evening = datetime(2026, 10, 22, 16, 30, tzinfo=IST)
+    monkeypatch.setattr(app.service, "now_ist", lambda: thu_evening)
+    env.service.calendar = ExpiryCalendar(env.settings, groww=FakeGroww(), clock=lambda: thu_evening)
+    out = web.participant().post("/api/recommend", json={"instrument": "NIFTY50", "horizon": "1d"}).json()
+    assert out["meta"]["trading_day"] == "2026-10-23"
+    assert out["snapshot"]["for_trading_day"] == {"date": "2026-10-23", "weekday": "Friday"}
+    assert [e["strategy_id"] for e in out["recommendation"]["excluded"]] == ["atm_roll_aggressive_diversified_kapoor"]
+    assert "2026-10-27" in out["recommendation"]["excluded"][0]["reasons"][0]       # next NIFTY expiry

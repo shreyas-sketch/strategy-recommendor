@@ -20,7 +20,7 @@ from .data.providers import now_ist
 from .expiries import expiry_context, schedule_check
 from .llm.recommender import NO_TRADE, RecommendationRefused
 from .profile import TradingProfile, apply_profile, profile_for_prompt, split
-from .service import RecommendationService, _RulesOnly, rules_recommendation, strategy_cards, today_ist
+from .service import RecommendationService, _RulesOnly, rules_recommendation, strategy_cards, today_ist, trading_day
 
 log = logging.getLogger(__name__)
 
@@ -279,7 +279,9 @@ class PortfolioAdvisor:
 
     def today(self, user_id: int, generate: bool = True) -> dict | None:
         """Today's personal recommendation for this participant (generated at most once per day)."""
-        day = today_ist()
+        # Keyed by the session the pick is for: an evening visit prepares tomorrow's pick, which the
+        # 06:00 job then reuses instead of paying for a second analysis.
+        day = trading_day(self.settings.admin.market_holidays).isoformat()
         cached = self.store.get_daily_rec(user_id, day)
         if cached or not generate:
             return cached
@@ -314,6 +316,8 @@ class PortfolioAdvisor:
         return markets, views, provider
 
     def _generate(self, user_id: int, day: str) -> dict:
+        from datetime import date
+        target = date.fromisoformat(day)       # the session this pick is for
         admin = self.settings.admin
         strategies = self.settings.strategies_for("1d")
         if not strategies:
@@ -324,7 +328,7 @@ class PortfolioAdvisor:
         calendar = self.service.calendar
         tradeable = []
         for s in eligible:
-            why = schedule_check(s, calendar)
+            why = schedule_check(s, calendar, target)
             if why:
                 excluded.append({"strategy_id": s.id, "reasons": [why], "kind": "schedule"})
             else:
@@ -368,10 +372,9 @@ class PortfolioAdvisor:
         judged = [s for s in eligible if s.id in scored]
 
         context = portfolio_context(self.service, portfolio["holdings"], views.get(bench_key)) if portfolio else None
-        now = now_ist()
-        expiries = expiry_context(calendar, list(markets))
+        expiries = expiry_context(calendar, list(markets), target)
         prompt_context = {
-            "today": {"date": day, "weekday": now.strftime("%A")},
+            "trading_day": {"date": day, "weekday": target.strftime("%A")},
             "underlying_markets": views,
             "expiry_calendar": expiries,
             "portfolio": context,
