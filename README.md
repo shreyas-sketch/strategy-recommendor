@@ -1,14 +1,13 @@
 # Strategy Recommender
 
-Tells each participant which of your algo strategies to run, based on the market
-(1 day / 1 week / 1 month) and on **their own portfolio**. The pick reaches them on
+Tells participants which of your algo strategies to run, based **only on market data**
+(1 day / 1 week / 1 month). Participants enter nothing about themselves: everyone gets
+the same daily pick, judged on the indices your strategies trade. The pick reaches them on
 WhatsApp every trading morning via AiSensy. Claude does the analysis, and the admin
 can switch between **Haiku 5.5, Sonnet 5.5 and Opus 5.5** at any time to control cost.
 
 ```
 candles (Groww / Twelve Data / yfinance) ─► indicators + regime (pandas)
-                                              │
-portfolio upload (CSV/XLSX) ─► holdings ──────┤
                                               ▼
                      Claude (admin-selected model) ranks your strategies
                      + explains why the pick beats each alternative
@@ -24,7 +23,7 @@ pip install -r requirements-dev.txt
 cp .env.example .env            # fill in ANTHROPIC_API_KEY, ADMIN_TOKEN, …
 echo "COOKIE_SECURE=0" >> .env  # local http only
 uvicorn app.main:app --reload
-pytest                          # 109 tests
+pytest                          # 92 tests
 ```
 
 * Admin: http://localhost:8000/admin (sign in with `ADMIN_TOKEN`)
@@ -35,7 +34,7 @@ pytest                          # 109 tests
 1. **New project → Deploy from GitHub repo.** The repo's `Dockerfile` and `railway.json`
    are picked up automatically, including the health check on `/healthz`.
 2. **Attach a volume** to the service with mount path `/data`. **This is required.** The
-   database (participants, portfolios, usage), admin settings and strategies all live
+   database (participants, admins, usage), admin settings and strategies all live
    there. Without it, everything is wiped on every redeploy. The app finds the volume
    through `RAILWAY_VOLUME_MOUNT_PATH`.
 3. **Variables:** `ANTHROPIC_API_KEY`, `MASTER_ADMIN_EMAIL` + `MASTER_ADMIN_PASSWORD` (and/or
@@ -93,14 +92,13 @@ checks every claim in the ID token, and stores no Google tokens.
   * Every participant endpoint takes the user from a server-side session.
   * No endpoint accepts a user id from the browser, so nobody can request someone else's
     data.
-  * Tests verify that one participant can't read or delete another's portfolio or
-    recommendation.
-* **The admin sees** who has uploaded a portfolio and how many holdings it has, never
-  the holdings themselves.
-* **Claude receives** symbols, weights, prices and P&L percentages only, never names or
+* **No personal data is collected for recommendations.** There is no portfolio upload
+  and no trading profile; the pick comes from market data alone.
+* **Claude receives** index market data and the strategy catalog only, never names or
   phone numbers.
-* **Deleting a participant** removes their portfolio, recommendations, sessions and
-  message log.
+* **Deleting a participant** removes their account, sessions and message log.
+* **Upgrading from an older version** deletes any stored portfolios and trading profiles
+  on first start.
 
 Security measures:
 
@@ -111,48 +109,20 @@ Security measures:
 | Brute force | login rate-limited per IP and per phone number |
 | CSRF | header check on every state-changing request |
 | Headers | strict CSP, no framing, `no-store` on API responses |
-| Uploads | 2 MB request limit; files parsed in memory, never stored; XML-attack-safe Excel parsing |
-| Cost abuse | per-participant daily caps on fresh AI analyses and uploads |
+| Uploads | admin-only (Tradetron import); 2 MB limit |
+| Cost abuse | per-participant daily cap on fresh AI analyses; one shared daily pick |
 
-## Trading profiles (suitability)
+## The daily pick
 
-Each participant fills in **risk tolerance, experience, capital and whether they have an
-F&O account** (Settings → My trading profile). Each strategy has a **risk level, minimum
-capital and minimum experience** (Admin → Strategies). Strategies whose instruments are
-only options/futures also need an F&O account.
+**My pick** (and the 06:00 WhatsApp message) is one pick for everyone, computed once per
+trading session:
+1. drops strategies that don't trade that session (expiry-day rules, Groww calendar),
+2. fetches the regime of each index the remaining strategies trade (strategies with no
+   fixed index are judged on the benchmark, default NIFTY 50),
+3. asks Claude which strategy to run and on which index, with the same "why this over
+   the others" comparison as the market tool.
 
-* **Hard filter, applied by fixed rules before any AI:** a strategy the participant
-  doesn't meet is never recommended to them. It's listed under "Not suitable for your
-  profile", with the reason.
-* **When the market's best fit is filtered out,** the page says so and picks the best of
-  the strategies that do suit them. If nothing suits them, the answer is "sit out".
-* **Claude weighs the profile** within the suitable set, e.g. simpler rules for beginners.
-  It receives a capital band (e.g. "₹1–5 lakh"), never the exact amount.
-* **No extra AI cost on the market tool:** the analysis is still shared across
-  participants, and suitability is applied per person on top.
-* **Without a profile** nothing is filtered, and participants are prompted to fill it in.
-* **Admin view:** the admin sees only whether a profile is set, not its contents.
-
-Strategies created before this feature default to medium risk, ₹0 minimum and beginner.
-Review them in Admin → Strategies.
-
-## Portfolio → today's strategy
-
-Participants upload a broker holdings export (.csv or .xlsx), or fill in the template
-CSV (`symbol,quantity,avg_price`).
-* **Symbols:** common broker column names are recognised.
-* **Company names:** exports that list names + ISIN (e.g. Groww) are matched through
-  Groww's public instrument list.
-* **Unmatched rows** are shown to the participant, never silently dropped.
-
-Each morning the app:
-1. takes their 15 largest holdings,
-2. measures trend, volatility, 1-month return and P&L for each,
-3. combines that with the benchmark index regime (default NIFTY 50),
-4. asks Claude which strategy to run today and on what (the index or a specific
-   holding), with the same "why this over the others" comparison as the market tool.
-
-Participants without a portfolio get the market-only recommendation.
+Every strategy is always considered; nothing is filtered per person.
 
 ## Daily WhatsApp at 06:00 IST (AiSensy)
 
@@ -165,8 +135,7 @@ Participants without a portfolio get the market-only recommendation.
 3. Participants opt in under Settings. Only opted-in, active participants get messages.
 
 How it runs:
-* Picks are prepared 25 minutes before send time, so 100 Claude calls aren't squeezed
-  into one minute.
+* The pick is prepared 25 minutes before send time (one Claude call, shared by everyone).
 * Each participant gets at most one message per day.
 * If the app was down at 6 AM, it won't send late messages after 8 AM.
 * "Prepare / Send now" buttons and a delivery log are in the admin panel.
@@ -179,7 +148,7 @@ with numbers as `91XXXXXXXXXX`. Check the first test send against your AiSensy a
 | | Haiku 5.5 | Sonnet 5.5 | Opus 5.5 |
 |---|---|---|---|
 | Per analysis | ~$0.001 | ~$0.02 | ~$0.04 |
-| 100 daily portfolio picks × 22 trading days | ~$2/month | ~$45/month | ~$90/month |
+| Daily pick × 22 trading days (shared) | ~$0.02/month | ~$0.45/month | ~$0.90/month |
 
 Market-tool results are shared across participants for 15–360 minutes. A monthly budget
 can auto-downgrade to Haiku, switch to the free rule engine, or block. Model prices are in
@@ -197,23 +166,20 @@ exports. For each file the importer:
   completed candle is above Supertrend(10, 3)… → BUY 1 lot NIFTY BANK CE ATM+2 strike".
 * **Detects the index it trades** (`underlyings`: BANKNIFTY, NIFTY50, SENSEX, …), the style
   (option buying, directional selling, short straddle) and intraday exit times.
-* **Fills in from the export:** capital (`capitalRequired`) as the minimum capital, and
-  F&O required for options legs.
-* **Suggests** risk level, experience, ideal market conditions and "avoid when" from the
-  structure. **Review these.**
+* **Notes the capital** (`capitalRequired`) in the logic text.
+* **Suggests** ideal market conditions and "avoid when" from the structure. **Review these.**
 * **Warns** when signals come from runtime variables set outside the export (e.g. the KC
   strategy's `BANKNIFTY_key1`/`key2`). Describe what sets them in Logic.
 
 Nothing is saved until you click **Review & save**. Re-importing an updated export
-refreshes the logic, underlyings and capital, and keeps the conditions and suitability you
-already reviewed. Original files are kept on the volume under `imports/`.
+refreshes the logic and underlyings, and keeps the conditions you already reviewed. Original files are kept on the volume under `imports/`.
 
 ### Each strategy is judged on its own index
 
 A strategy with `underlyings` is scored only on that index's market regime. Bank Nifty
 strategies are judged on Bank Nifty, and the NIFTY/SENSEX straddle on both indexes
 (averaged).
-* **Daily pick:** fetches each index the participant's suitable strategies trade, and
+* **Daily pick:** fetches each index the strategies trade, and
   gives Claude today's date and weekday (for expiry-day strategies).
 * **Market check:** for an instrument, ranks only the strategies that trade it, plus
   generic ones.
@@ -271,7 +237,7 @@ are in `config/strategies/examples/` (not loaded).
 | Provider | Key | Notes |
 |---|---|---|
 | **Groww** | `GROWW_API_KEY` + `GROWW_TOTP_SECRET` (TOTP key), or `GROWW_API_KEY` + `GROWW_API_SECRET` (approval key) | Best for NSE/BSE + the F&O expiry calendar. The app logs in itself (generating the 6-digit TOTP code from the secret) and again after Groww's daily 06:00 IST reset. |
-| **Twelve Data** | `TWELVEDATA_API_KEY` | Backup. Free plan: 8 req/min, which is too slow for many portfolios. |
+| **Twelve Data** | `TWELVEDATA_API_KEY` | Backup. Free plan: 8 req/min, which is slow for many symbols. |
 | **yfinance** | none | Free last resort. Unofficial and delayed. |
 
 Check the index symbols in `config/settings.yaml` against your Groww / Twelve Data

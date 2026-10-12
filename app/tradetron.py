@@ -298,24 +298,21 @@ def analyse(data: dict) -> dict:
         avoid = ["Strong trending or gap days — one leg runs away",
                  "Volatility expanding or event days (RBI policy, budget, results)"]
         risk_notes = "Naked short options: losses are open-ended on a large move; margin-heavy."
-        risk, exp = "high", "advanced"
     elif sells and not buys:
         style, category = "Directional option selling", "trend"
         ideal = {"trend": ["up", "down"], "trend_strength": ["moderate", "strong"], "volatility": ["normal", "high"], "squeeze": "any"}
         avoid = ["Sharp reversals against the position", "Choppy days that flip the signal repeatedly"]
         risk_notes = "Sells naked options in the trend direction: collects premium but a fast reversal causes large losses."
-        risk, exp = "high", "advanced"
     elif buys and not sells:
         style, category = "Directional option buying (trend following)", "trend"
         ideal = {"trend": ["up", "down"], "trend_strength": ["moderate", "strong"], "volatility": ["normal", "high"], "squeeze": "any"}
         avoid = ["Sideways, choppy sessions — repeated whipsaws and premium decay",
                  "Very low volatility — option premiums barely move"]
         risk_notes = "Bought options lose value through time decay; whipsaws in a range cause a string of small losses."
-        risk, exp = "medium", "intermediate"
     else:
         style, category = "Mixed / other", "other"
         ideal = {"trend": [], "trend_strength": [], "volatility": [], "squeeze": "any"}
-        avoid, risk_notes, risk, exp = [], "", "medium", "intermediate"
+        avoid, risk_notes = [], ""
         warnings.append("Could not classify the strategy style — set category and ideal conditions manually.")
 
     instruments = sorted({"options" if leg.get("optionType") in ("CE", "PE") else "futures" for leg in legs_all}) or ["index"]
@@ -358,10 +355,9 @@ def analyse(data: dict) -> dict:
         "id": _slug(name), "name": name, "category": category, "instruments": instruments, "horizons": horizons,
         "description": description, "logic": logic[:12000], "ideal_conditions": ideal,
         "avoid_conditions": avoid, "risk_notes": risk_notes,
-        "risk_level": risk, "min_capital_inr": capital, "min_experience": exp,
         "underlyings": underlyings, "active_days": active_days,
     }
-    warnings.append("Ideal market conditions, risk level and experience are suggestions from the strategy's structure — review them.")
+    warnings.append("Ideal market conditions are suggestions from the strategy's structure — review them.")
     return {"draft": draft, "warnings": warnings}
 
 

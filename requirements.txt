@@ -10,8 +10,5 @@ requests==2.34.2
 yfinance==1.7.0
 python-dotenv==1.2.4
 python-multipart==0.0.32
-openpyxl==3.1.5
-# openpyxl uses defusedxml automatically -> protects Excel uploads from XML attacks
-defusedxml==0.7.1
 # IANA timezone data for zoneinfo (Asia/Kolkata) — slim containers may not ship system tz files
 tzdata==2026.5

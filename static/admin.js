@@ -60,7 +60,6 @@ async function refresh() {
   $("c1m").value = s.cache_minutes["1m"] ?? 0;
   $("providers").value = s.provider_order.join(", ");
   $("q-analyses").value = s.per_user_daily_analyses;
-  $("q-uploads").value = s.per_user_daily_uploads;
   $("n-bench").value = s.portfolio_benchmark;
 
   const budget = usage.budget_usd;
@@ -103,7 +102,6 @@ $("save-budget").onclick = (e) => save({
   cache_minutes: { "1d": Number($("c1d").value || 0), "1w": Number($("c1w").value || 0), "1m": Number($("c1m").value || 0) },
   provider_order: $("providers").value.split(",").map((x) => x.trim()).filter(Boolean),
   per_user_daily_analyses: Number($("q-analyses").value || 0),
-  per_user_daily_uploads: Number($("q-uploads").value || 0),
 }, e.target);
 
 // ---- participants ------------------------------------------------------
@@ -126,12 +124,10 @@ $("invite-csv").onclick = () => {
 
 async function loadParticipants() {
   const { participants } = await api("/api/admin/participants");
-  $("participants").innerHTML = `<tr><th>Name</th><th>Sign-in</th><th>Status</th><th>Profile</th><th>Portfolio</th><th>WhatsApp</th><th>Last login</th><th></th></tr>` +
+  $("participants").innerHTML = `<tr><th>Name</th><th>Sign-in</th><th>Status</th><th>WhatsApp</th><th>Last login</th><th></th></tr>` +
     (participants.length ? participants.map((p) => `<tr>
       <td>${esc(p.name)}</td><td class="small">${p.email ? esc(p.email) : ""}${p.email && p.phone ? "<br>" : ""}${p.phone ? esc(p.phone) : ""}</td>
       <td>${!p.active ? '<span class="pill avoid">disabled</span>' : (p.activated || p.last_login) ? '<span class="pill recommended">active</span>' : '<span class="pill conditional">invited</span>'}</td>
-      <td>${p.has_profile ? "set" : '<span class="muted">—</span>'}</td>
-      <td>${p.holdings_count ? `${p.holdings_count} holdings` : '<span class="muted">—</span>'}</td>
       <td>${p.notify_opt_in ? "opted in" : '<span class="muted">off</span>'}${p.last_notification ? ` <span class="muted small">(${esc(p.last_notification)})</span>` : ""}</td>
       <td class="small">${esc(p.last_login || "—")}</td>
       <td class="actions">${p.phone ? `<button data-invite="${p.id}">New invite</button> ` : ""}<button data-toggle="${p.id}" data-active="${p.active}">${p.active ? "Disable" : "Enable"}</button> <button class="danger" data-remove="${p.id}" data-name="${esc(p.name)}">Delete</button></td>
@@ -163,7 +159,7 @@ $("participants").addEventListener("click", async (e) => {
       showInvites([{ name: row[0].textContent, phone: row[1].textContent, email: "", invite_url: r.invite_url }]);
     } else if (d.toggle) {
       await api(`/api/admin/participants/${d.toggle}`, { method: "PATCH", body: JSON.stringify({ active: d.active !== "1" }) });
-    } else if (d.remove && confirm(`Delete ${d.name} and all their data (portfolio, history)? This cannot be undone.`)) {
+    } else if (d.remove && confirm(`Delete ${d.name} and all their data (sessions, message history)? This cannot be undone.`)) {
       await api(`/api/admin/participants/${d.remove}`, { method: "DELETE" });
     } else return;
     await loadParticipants();
@@ -250,11 +246,11 @@ const setChecks = (g, vals) => document.querySelectorAll(`.checks[data-group="${
 
 async function loadStrategies() {
   strategies = (await api("/api/admin/strategies")).strategies;
-  $("strategy-list").innerHTML = `<tr><th>Name</th><th>ID</th><th>Category</th><th>Trades on</th><th>Horizons</th><th>Suits</th><th></th></tr>` +
+  $("strategy-list").innerHTML = `<tr><th>Name</th><th>ID</th><th>Category</th><th>Trades on</th><th>Horizons</th><th>Trades when</th><th></th></tr>` +
     strategies.map((st) => `<tr><td>${esc(st.name)}${st.source ? ' <span class="pill conditional">Tradetron</span>' : ""}</td><td class="muted">${esc(st.id)}</td><td>${esc(st.category)}</td>
       <td>${esc((st.underlyings || []).join(", ") || "any")}</td>
       <td>${esc(st.horizons.join(", "))}</td>
-      <td class="small">${st.active_days && st.active_days !== "any" ? `<span class="pill conditional">${st.active_days === "expiry_day" ? "expiry day" : "expiry + day before"}</span> ` : ""}${esc(st.risk_level)} risk · ${esc(st.min_experience)}+ · ₹${Number(st.min_capital_inr).toLocaleString("en-IN")}+</td>
+      <td class="small">${st.active_days && st.active_days !== "any" ? `<span class="pill conditional">${st.active_days === "expiry_day" ? "expiry day" : "expiry + day before"}</span>` : "every day"}</td>
       <td class="actions"><button data-edit="${esc(st.id)}">Edit</button> <button class="danger" data-del="${esc(st.id)}">Delete</button></td></tr>`).join("");
 }
 
@@ -271,9 +267,6 @@ function openForm(st, { asDraft = false, existingId = null } = {}) {
   const c = st?.ideal_conditions || {};
   setChecks("trend", c.trend); setChecks("trend_strength", c.trend_strength); setChecks("volatility", c.volatility);
   $("f-squeeze").value = String(c.squeeze ?? "any");
-  $("f-risklevel").value = st?.risk_level || "medium";
-  $("f-mincap").value = st?.min_capital_inr ?? 0;
-  $("f-minexp").value = st?.min_experience || "beginner";
   $("strategy-form-card").classList.remove("hidden");
   $("strategy-form-card").scrollIntoView({ behavior: "smooth" });
 }
@@ -334,9 +327,6 @@ $("strategy-form").addEventListener("submit", async (e) => {
     underlyings: $("f-underlyings").value.split(",").map((x) => x.trim().toUpperCase()).filter(Boolean),
     source: currentSource,
     active_days: $("f-activedays").value,
-    risk_level: $("f-risklevel").value,
-    min_capital_inr: Math.round(Number($("f-mincap").value || 0)),
-    min_experience: $("f-minexp").value,
   };
   if (!body.horizons.length) return showError("Pick at least one horizon.");
   $("f-save").disabled = true;

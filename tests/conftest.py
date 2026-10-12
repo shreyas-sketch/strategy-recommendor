@@ -14,7 +14,7 @@ os.environ.pop("RAILWAY_ENVIRONMENT", None)
 from app.config import Settings  # noqa: E402
 from app.data.base import Provider, normalize  # noqa: E402
 from app.data.providers import DataRouter  # noqa: E402
-from app.llm.recommender import PortfolioRecommendation, Recommendation  # noqa: E402
+from app.llm.recommender import DailyRecommendation, Recommendation  # noqa: E402
 from app.service import RecommendationService  # noqa: E402
 from app.store import Store  # noqa: E402
 
@@ -71,10 +71,9 @@ class FakeMessages:
         ids = [s["id"] for s in self.parent.catalog_from(kwargs)]
         cls = kwargs["output_format"]
         extra = {}
-        if cls is PortfolioRecommendation:
-            extra = dict(portfolio_summary="Mostly trending stocks.", run_on="RELIANCE",
-                         why="Holdings trend strongly.", portfolio_risks=["Concentrated"],
-                         whatsapp_line="Your top holdings\nare trending up strongly.")
+        if cls is DailyRecommendation:
+            extra = dict(run_on="NIFTY 50", why="The index trends strongly.",
+                         whatsapp_line="NIFTY is\ntrending up strongly.")
         else:
             extra = dict(regime="strong up")
         rec = cls(**extra,
@@ -137,7 +136,7 @@ def web(env):
     from app import auth
     from app.main import create_app
     from app.notify import DailyJobs
-    from app.portfolio import PortfolioAdvisor
+    from app.daily import DailyAdvisor
 
     class FakeAISensy:
         configured = True
@@ -150,7 +149,7 @@ def web(env):
             return True, "HTTP 200"
 
     aisensy = FakeAISensy()
-    jobs = DailyJobs(PortfolioAdvisor(env.service), aisensy, workers=2)
+    jobs = DailyJobs(DailyAdvisor(env.service), aisensy)
     app = create_app(env.settings, env.service, jobs=jobs, start_scheduler=False)
 
     def new_client(**headers):

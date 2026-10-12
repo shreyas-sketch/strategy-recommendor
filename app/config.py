@@ -60,8 +60,6 @@ class AdminSettings(BaseModel):
     cache_minutes: dict[str, int] = {"1d": 15, "1w": 60, "1m": 360}
     # Fresh (uncached) AI analyses one participant may trigger per day — caps cost abuse.
     per_user_daily_analyses: int = Field(20, ge=0)
-    # Portfolio uploads per participant per day (each re-upload re-runs their daily analysis).
-    per_user_daily_uploads: int = Field(5, ge=0)
     # Daily WhatsApp notification (AISensy)
     notify_enabled: bool = False
     notify_time: str = Field("06:00", pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
@@ -71,7 +69,7 @@ class AdminSettings(BaseModel):
     aisensy_campaign: str = ""
     # AiSensy API campaign that sends the WhatsApp login code ({{1}} = code). Empty disables code login.
     aisensy_otp_campaign: str = "hub_login_code_"
-    # Index used as the market backdrop for portfolio recommendations.
+    # Index used for the daily pick's market backdrop and for strategies with no fixed underlying.
     portfolio_benchmark: str = "NIFTY50"
 
 
@@ -96,10 +94,6 @@ class Strategy(BaseModel):
     ideal_conditions: Conditions = Conditions()
     avoid_conditions: list[str] = []
     risk_notes: str = ""
-    # Suitability — participants whose profile doesn't meet these never get this strategy.
-    risk_level: Literal["low", "medium", "high"] = "medium"
-    min_capital_inr: int = Field(0, ge=0)
-    min_experience: Literal["beginner", "intermediate", "advanced"] = "beginner"
     # Instrument keys (config/settings.yaml) this strategy trades, e.g. ["BANKNIFTY"]. Each strategy is
     # judged on the market regime of its own underlying(s). Empty = generic (judged on the analysed instrument).
     underlyings: list[Annotated[str, Field(pattern=r"^[A-Z0-9&_\-]{1,24}$")]] = []

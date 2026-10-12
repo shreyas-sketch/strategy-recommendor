@@ -6,7 +6,7 @@ import json
 import sys
 
 from .notify import AISensyClient, DailyJobs
-from .portfolio import PortfolioAdvisor
+from .daily import DailyAdvisor
 from .service import RecommendationService
 from .config import Settings
 from .store import Store
@@ -18,7 +18,7 @@ def main(argv: list[str]) -> int:
         return 2
     settings = Settings()
     service = RecommendationService(settings, Store(settings.data_dir / "app.db"))
-    jobs = DailyJobs(PortfolioAdvisor(service), AISensyClient())
+    jobs = DailyJobs(DailyAdvisor(service), AISensyClient())
     result = jobs.tick() if argv[0] == "tick" else jobs.run(argv[0])
     print(json.dumps(result))
     return 0

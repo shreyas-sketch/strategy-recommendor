@@ -1,4 +1,4 @@
-"""SQLite storage: usage/cost, caches, participants, sessions, portfolios, notifications, job locks.
+"""SQLite storage: usage/cost, caches, participants, sessions, notifications, job locks.
 
 Data-isolation rule: every participant-data method takes the user_id resolved from the
 server-side session. No method looks up personal data by anything the client sends.
@@ -34,8 +34,7 @@ CREATE TABLE IF NOT EXISTS users (
     active INTEGER NOT NULL DEFAULT 1,
     notify_opt_in INTEGER NOT NULL DEFAULT 0,
     created TEXT NOT NULL,
-    last_login TEXT,
-    profile TEXT
+    last_login TEXT
 );
 CREATE TABLE IF NOT EXISTS login_codes (
     user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
@@ -72,20 +71,6 @@ CREATE TABLE IF NOT EXISTS sessions (
     token_hash TEXT PRIMARY KEY,
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     expires REAL NOT NULL
-);
-CREATE TABLE IF NOT EXISTS portfolios (
-    user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-    holdings TEXT NOT NULL,
-    unresolved TEXT NOT NULL DEFAULT '[]',
-    source_name TEXT,
-    uploaded TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS daily_recs (
-    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    day TEXT NOT NULL,
-    payload TEXT NOT NULL,
-    created REAL NOT NULL,
-    PRIMARY KEY (user_id, day)
 );
 CREATE TABLE IF NOT EXISTS quotas (
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -128,9 +113,16 @@ class Store:
 
     def _migrate(self) -> None:
         """Bring databases created by earlier versions up to the current users schema."""
+        # Recommendations are market-only now: earlier versions stored per-user portfolios and
+        # trading profiles. Delete that personal data rather than keep it around unused.
+        self._conn.execute("DROP TABLE IF EXISTS portfolios")
+        self._conn.execute("DROP TABLE IF EXISTS daily_recs")
         info = {r["name"]: r for r in self._conn.execute("PRAGMA table_info(users)")}
-        if "profile" not in info:
-            self._conn.execute("ALTER TABLE users ADD COLUMN profile TEXT")
+        if "profile" in info:
+            try:
+                self._conn.execute("ALTER TABLE users DROP COLUMN profile")
+            except sqlite3.OperationalError:     # SQLite < 3.35
+                self._conn.execute("UPDATE users SET profile = NULL")
         if "email" in info and not info["phone"]["notnull"]:
             return
         # Phone became optional and email was added: SQLite needs a table rebuild for that.
@@ -139,9 +131,9 @@ class Store:
             CREATE TABLE users_new (
                 id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, phone TEXT UNIQUE, email TEXT UNIQUE,
                 password_hash TEXT, active INTEGER NOT NULL DEFAULT 1, notify_opt_in INTEGER NOT NULL DEFAULT 0,
-                created TEXT NOT NULL, last_login TEXT, profile TEXT);
-            INSERT INTO users_new (id, name, phone, password_hash, active, notify_opt_in, created, last_login, profile)
-                SELECT id, name, phone, password_hash, active, notify_opt_in, created, last_login, profile FROM users;
+                created TEXT NOT NULL, last_login TEXT);
+            INSERT INTO users_new (id, name, phone, password_hash, active, notify_opt_in, created, last_login)
+                SELECT id, name, phone, password_hash, active, notify_opt_in, created, last_login FROM users;
             DROP TABLE users;
             ALTER TABLE users_new RENAME TO users;
         """)
@@ -208,7 +200,6 @@ class Store:
 
     def cache_clear(self) -> None:
         self._write("DELETE FROM rec_cache")
-        self._write("DELETE FROM daily_recs")
 
     # ---- participants -----------------------------------------------------
     def create_user(self, name: str, phone: str | None, email: str | None = None) -> int:
@@ -233,10 +224,9 @@ class Store:
     def list_users(self) -> list[dict]:
         return self._all(
             "SELECT u.id, u.name, u.phone, u.email, u.active, u.notify_opt_in, u.created, u.last_login,"
-            " u.password_hash IS NOT NULL AS activated, u.profile IS NOT NULL AS has_profile,"
-            " p.uploaded AS portfolio_uploaded, json_array_length(p.holdings) AS holdings_count,"
+            " u.password_hash IS NOT NULL AS activated,"
             " (SELECT status FROM notifications n WHERE n.user_id = u.id ORDER BY n.id DESC LIMIT 1) AS last_notification"
-            " FROM users u LEFT JOIN portfolios p ON p.user_id = u.id ORDER BY u.name")
+            " FROM users u ORDER BY u.name")
 
     def update_user(self, user_id: int, **fields) -> None:
         """Raises ValueError if a new phone/email is already used by someone else."""
@@ -250,17 +240,8 @@ class Store:
         except sqlite3.IntegrityError as exc:
             raise ValueError("That phone number or email is already used by another participant") from exc
 
-    def get_profile(self, user_id: int) -> dict | None:
-        row = self._one("SELECT profile FROM users WHERE id = ?", (user_id,))
-        return json.loads(row["profile"]) if row and row["profile"] else None
-
-    def set_profile(self, user_id: int, profile: dict) -> None:
-        with self._lock, self._conn:
-            self._conn.execute("UPDATE users SET profile = ? WHERE id = ?", (json.dumps(profile), user_id))
-            self._conn.execute("DELETE FROM daily_recs WHERE user_id = ?", (user_id,))   # re-pick with new profile
-
     def delete_user(self, user_id: int) -> None:
-        # ON DELETE CASCADE removes sessions, invites, portfolio, recommendations, quotas, notifications.
+        # ON DELETE CASCADE removes sessions, invites, login codes, quotas, notifications.
         self._write("DELETE FROM users WHERE id = ?", (user_id,))
 
     def opted_in_users(self) -> list[dict]:
@@ -381,38 +362,6 @@ class Store:
             row = self._conn.execute("SELECT admin_id, expires FROM admin_invites WHERE token_hash = ?", (h,)).fetchone()
             self._conn.execute("DELETE FROM admin_invites WHERE token_hash = ?", (h,))
         return int(row["admin_id"]) if row and row["expires"] >= time.time() else None
-
-    # ---- portfolios ---------------------------------------------------------
-    def save_portfolio(self, user_id: int, holdings: list[dict], unresolved: list[str], source_name: str) -> None:
-        with self._lock, self._conn:
-            self._conn.execute(
-                "INSERT OR REPLACE INTO portfolios (user_id, holdings, unresolved, source_name, uploaded)"
-                " VALUES (?,?,?,?,?)", (user_id, json.dumps(holdings), json.dumps(unresolved), source_name, _now_iso()))
-            self._conn.execute("DELETE FROM daily_recs WHERE user_id = ?", (user_id,))
-
-    def get_portfolio(self, user_id: int) -> dict | None:
-        row = self._one("SELECT holdings, unresolved, source_name, uploaded FROM portfolios WHERE user_id = ?",
-                        (user_id,))
-        if row:
-            row["holdings"] = json.loads(row["holdings"])
-            row["unresolved"] = json.loads(row["unresolved"])
-        return row
-
-    def delete_portfolio(self, user_id: int) -> None:
-        with self._lock, self._conn:
-            self._conn.execute("DELETE FROM portfolios WHERE user_id = ?", (user_id,))
-            self._conn.execute("DELETE FROM daily_recs WHERE user_id = ?", (user_id,))
-
-    # ---- personal daily recommendations ----------------------------------
-    def get_daily_rec(self, user_id: int, day: str) -> dict | None:
-        row = self._one("SELECT payload FROM daily_recs WHERE user_id = ? AND day = ?", (user_id, day))
-        return json.loads(row["payload"]) if row else None
-
-    def put_daily_rec(self, user_id: int, day: str, payload: dict) -> None:
-        with self._lock, self._conn:
-            self._conn.execute("INSERT OR REPLACE INTO daily_recs (user_id, day, payload, created) VALUES (?,?,?,?)",
-                               (user_id, day, json.dumps(payload), time.time()))
-            self._conn.execute("DELETE FROM daily_recs WHERE created < ?", (time.time() - 14 * 86400,))
 
     # ---- per-user quotas ----------------------------------------------------
     def take_quota(self, user_id: int, day: str, kind: str, limit: int) -> bool:

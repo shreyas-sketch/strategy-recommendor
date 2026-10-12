@@ -51,22 +51,19 @@ class Recommendation(BaseModel):
     reassess_if: list[str] = Field(description="Concrete market changes that would flip the recommendation")
 
 
-class PortfolioRecommendation(BaseModel):
-    portfolio_summary: str = Field(description="2-3 sentences on what the portfolio is exposed to right now, "
-                                               "or a one-line note if no portfolio was provided")
-    market_summary: str = Field(description="1-2 sentences on the regime of the indices the strategies trade")
+class DailyRecommendation(BaseModel):
+    market_summary: str = Field(description="2-3 sentences on the regime of the indices the strategies trade")
     confidence: Literal["low", "medium", "high"]
-    top_strategy_id: str = Field(description=f"Strategy to run today, or {NO_TRADE}")
-    run_on: str = Field(description="What to run it on: the benchmark index, or a holding's symbol from the list")
-    why: str = Field(description="Why this strategy suits THIS portfolio today, citing holding and market numbers")
+    top_strategy_id: str = Field(description=f"Strategy to run in this session, or {NO_TRADE}")
+    run_on: str = Field(description="The index the strategy trades (its underlying)")
+    why: str = Field(description="Why this strategy fits this session, citing the market numbers of its index")
     why_top_over_others: str = Field(description=(
-        "2-4 sentences: name the runner-up and the portfolio/market numbers that separate them. "
+        "2-4 sentences: name the runner-up and the market numbers that separate them. "
         f"If {NO_TRADE}, explain why even the best-scoring strategy is not good enough"))
-    deciding_factors: list[DecidingFactor] = Field(description="3-6 portfolio or market facts that decided the ranking")
-    rankings: list[StrategyAssessment] = Field(description="Every catalog strategy, best first")
-    portfolio_risks: list[str] = Field(description="1-3 concrete risks in this portfolio today")
+    deciding_factors: list[DecidingFactor] = Field(description="3-6 market facts that decided the ranking")
+    rankings: list[StrategyAssessment] = Field(description="Every listed strategy, best first")
     whatsapp_line: str = Field(description="One plain-text sentence under 150 characters, no line breaks or emojis, "
-                                           "summarising the reason for today's pick")
+                                           "summarising the reason for the pick")
 
 
 class RecommendationRefused(RuntimeError):
@@ -118,21 +115,18 @@ def build_user(instrument_label: str, snapshot: dict, rule_scores: list[dict]) -
     )
 
 
-PORTFOLIO_SYSTEM_TEMPLATE = """You are the strategy-selection analyst for an algorithmic trading platform in the Indian market (NSE/BSE).
-Each morning a participant asks: "Which ONE of the platform's strategies should I run TODAY?" Strategies run automatically on the platform for the trading day.
+DAILY_SYSTEM_TEMPLATE = """You are the strategy-selection analyst for an algorithmic trading platform in the Indian market (NSE/BSE).
+Each day the platform tells its participants which ONE of its strategies best fits the next trading session. Strategies run automatically for that session. Decide from market data only.
 
 How to decide:
 - Use ONLY the numbers provided. Do not invent news, events, expiry dates you were not given, or prices.
 - Each strategy trades the index listed in its "underlyings". Judge it on THAT index's regime in underlying_markets — never on a different index. A strategy with no underlyings is generic: judge it on the benchmark.
-- expiry_calendar gives each index's next expiry as seen from trading_day (days to expiry, whether that day is expiry day or the day before, weekly vs monthly). Strategies that do not trade that day were already removed. Market data runs up to the latest candle, which may be the previous session's close. Weigh expiry effects for option strategies: expiry day = fast premium decay and sharp late moves; near expiry = high gamma.
-- Read each strategy's logic carefully: option buying needs movement and suffers from time decay in ranges; option selling and straddles profit from calm or decaying premium and suffer on trending or volatile days; note day-of-week or expiry-day conditions (trading_day gives the session this pick is for) and say so if a strategy may not trigger that day.
-- If a portfolio is provided, also weigh it: concentration, how much is trending up/down or sideways, volatility of the largest holdings, unrealised profit or loss (e.g. a portfolio heavy in falling stocks may call for a strategy that profits from or offsets downside). If portfolio is null, decide on the markets and the profile only.
-- run_on: the index (or holding symbol) the strategy will trade — normally its underlying.
-- The rule_score is a simple pre-computed match on each strategy's own underlying; use it as a hint and override it when the detailed numbers or the strategy logic disagree.
+- Read each strategy's logic carefully: option buying needs movement and suffers from time decay in ranges; option selling and straddles profit from calm or decaying premium and suffer on trending or volatile days; in-the-money versus out-of-the-money strikes change the risk.
+- trading_day is the session the pick is for; the candles end at the latest available bar, which may be the previous session's close. expiry_calendar gives each index's next expiry as seen from trading_day. Weigh expiry effects for option strategies: expiry day = fast premium decay and sharp late moves; near expiry = high gamma.
+- Only the strategies in strategy_ids may be ranked; the ones in not_trading_this_session do not trade that day.
+- The rule_score is a simple pre-computed match on each strategy's own index; use it as a hint and override it when the detailed numbers or the strategy logic disagree.
 - If no strategy fits, set top_strategy_id to {no_trade} and explain — sitting out is valid.
-- Suitability comes first. Only the strategies in eligible_strategy_ids may be recommended or ranked; the others were excluded by hard rules for this participant's profile (risk tolerance, experience, capital, F&O access) and are listed in excluded_strategies for context only.
-- Within the eligible set, weigh participant_profile when present: prefer simpler rules for beginners, defined-risk strategies for low risk tolerance, and nothing whose sizing is unrealistic for the capital band. Mention the profile in why when it shaped the pick.
-- Rank every eligible strategy exactly once with its exact id; fit scores must match the order.
+- Rank every listed strategy exactly once with its exact id; fit scores must match the order.
 - Justify the pick against the alternatives: why_top_over_others names the runner-up and the separating numbers; vs_top on every strategy gives the concrete reason it ranks below the pick; deciding_factors lists 3-6 facts with the strategy ids each favors and hurts.
 - Short, concrete, cite numbers (e.g. "BANKNIFTY ADX 31", "NIFTY volatility in the 20th percentile"). Decision support only — never promise profits.
 
@@ -140,17 +134,16 @@ Strategy catalog:
 {catalog}"""
 
 
-def build_portfolio_system(strategies: list[Strategy]) -> str:
-    catalog = json.dumps([s.model_dump(exclude={"horizons"}) for s in strategies], indent=1, ensure_ascii=False)
-    return PORTFOLIO_SYSTEM_TEMPLATE.format(no_trade=NO_TRADE, catalog=catalog)
+def build_daily_system(strategies: list[Strategy]) -> str:
+    catalog = json.dumps([s.model_dump(exclude={"horizons", "source"}) for s in strategies], indent=1, ensure_ascii=False)
+    return DAILY_SYSTEM_TEMPLATE.format(no_trade=NO_TRADE, catalog=catalog)
 
 
-def build_portfolio_user(context: dict, rule_scores: list[dict]) -> str:
-    # The context carries holdings and statistics only — never the participant's name or phone.
+def build_daily_user(context: dict, rule_scores: list[dict]) -> str:
     return (
-        f"Market, portfolio and participant data:\n{json.dumps(context, indent=1, ensure_ascii=False)}\n\n"
-        f"Rule-engine market pre-scores (hint only):\n{json.dumps(rule_scores)}\n\n"
-        "Which strategy should this participant run today?"
+        f"Market data for the session:\n{json.dumps(context, indent=1, ensure_ascii=False)}\n\n"
+        f"Rule-engine pre-scores (hint only):\n{json.dumps(rule_scores, ensure_ascii=False)}\n\n"
+        "Which strategy best fits this session?"
     )
 
 
@@ -170,12 +163,10 @@ class ClaudeRecommender:
                                  build_user(instrument_label, snapshot, rule_scores), Recommendation)
         return _sanitize(rec, strategies, rule_scores), usage
 
-    def recommend_portfolio(self, *, model: ModelInfo, effort: str, catalog: list[Strategy],
-                            eligible: list[Strategy], context: dict, rule_scores: list[dict]):
-        # The system prompt carries the full catalog so it stays identical (and cached) across
-        # participants; eligibility goes in the per-participant message and is enforced by _sanitize.
-        rec, usage = self._parse(model, effort, build_portfolio_system(catalog),
-                                 build_portfolio_user(context, rule_scores), PortfolioRecommendation)
+    def recommend_daily(self, *, model: ModelInfo, effort: str, catalog: list[Strategy],
+                        eligible: list[Strategy], context: dict, rule_scores: list[dict]):
+        rec, usage = self._parse(model, effort, build_daily_system(catalog),
+                                 build_daily_user(context, rule_scores), DailyRecommendation)
         return _sanitize(rec, eligible, rule_scores), usage
 
     def _parse(self, model: ModelInfo, effort: str, system: str, user: str, output_format):

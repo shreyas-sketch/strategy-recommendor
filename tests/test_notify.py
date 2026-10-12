@@ -34,13 +34,13 @@ def test_send_once_per_day_to_opted_in_only(env, web, monkeypatch):
     a = web.participant("Asha Rao", "9000000001")
     web.participant("Bilal", "9000000002")          # not opted in
     a.put("/api/me/notifications", json={"opt_in": True})
-    a.post("/api/portfolio", files={"file": ("p.csv", b"symbol,quantity\nRELIANCE,10\n", "text/csv")})
 
     from app import notify, service
     monkeypatch.setattr(notify, "today_ist", lambda: "2026-10-12")
     monkeypatch.setattr(service, "today_ist", lambda: "2026-10-12")
-    import app.portfolio as portfolio
-    monkeypatch.setattr(portfolio, "today_ist", lambda: "2026-10-12")
+    import app.daily as daily
+    from datetime import date
+    monkeypatch.setattr(daily, "trading_day", lambda holidays=(), now=None: date(2026, 10, 12))
 
     assert web.jobs.tick(at(2026, 10, 12, 6, 1)) == ["send"]
     assert web.jobs.tick(at(2026, 10, 12, 6, 2)) == []          # DB lock: once per day
@@ -48,7 +48,7 @@ def test_send_once_per_day_to_opted_in_only(env, web, monkeypatch):
     msg = web.aisensy.sent[0]
     assert msg["phone"] == "919000000001" and msg["campaign"] == "daily_strategy"
     first, strategy, run_on, line = msg["params"]
-    assert first == "Asha" and run_on == "RELIANCE"
+    assert first == "Asha" and run_on == "NIFTY 50"
     assert "\n" not in line                                      # WhatsApp rejects newlines in params
     # manual re-run skips people already notified
     assert web.jobs.send_all()["skipped"] == 1

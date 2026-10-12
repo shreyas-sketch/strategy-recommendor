@@ -1,55 +1,31 @@
 """Data isolation, sessions, invites, CSRF and rate limiting."""
 
-TEMPLATE = b"symbol,quantity,avg_price\nRELIANCE,10,2450\nINFY,5,1500\n"
-
-
-def upload(c, data=TEMPLATE, name="p.csv"):
-    return c.post("/api/portfolio", files={"file": (name, data, "text/csv")})
-
-
-def test_participants_never_see_each_others_portfolio(web):
-    a = web.participant("Asha", "9000000001")
+def test_me_only_describes_the_caller(web):
+    web.participant("Asha", "9000000001")
     b = web.participant("Bilal", "9000000002")
-    assert upload(a).status_code == 200
-    assert b.get("/api/portfolio").json()["portfolio"] is None
-    assert a.get("/api/portfolio").json()["portfolio"]["holdings"][0]["symbol"] == "INFY"
-    # B deleting "their" portfolio cannot touch A's
-    b.delete("/api/portfolio")
-    assert a.get("/api/portfolio").json()["portfolio"] is not None
-    # /api/me only describes the caller, with a masked phone
     me_b = b.get("/api/me").json()
-    assert me_b["name"] == "Bilal" and me_b["has_portfolio"] is False
-    assert "9000000002" not in me_b["phone"]
+    assert me_b["name"] == "Bilal" and "9000000002" not in me_b["phone"]   # masked phone
+    assert "Asha" not in str(me_b)
 
 
-def test_personal_recommendation_is_per_user(env, web):
-    a = web.participant("Asha", "9000000001")
-    b = web.participant("Bilal", "9000000002")
-    upload(a)
-    ra = a.get("/api/me/today").json()
-    rb = b.get("/api/me/today").json()
-    assert ra["meta"]["has_portfolio"] is True and "context" in ra
-    assert rb["meta"]["has_portfolio"] is False and "context" not in rb
-    syms = {h["symbol"] for h in ra["context"]["holdings"]}
-    assert syms == {"RELIANCE", "INFY"}
-
-
-def test_claude_never_receives_name_or_phone(env, web):
+def test_daily_pick_is_market_only_and_shared(env, web):
     a = web.participant("Zubeida Unique", "9123456789")
-    upload(a)
-    a.get("/api/me/today")
+    b = web.participant("Bilal", "9000000002")
+    ra = a.get("/api/me/today").json()
+    calls = len(env.client.calls)
+    rb = b.get("/api/me/today").json()
+    assert len(env.client.calls) == calls                  # one AI call for everyone
+    assert ra["recommendation"] == rb["recommendation"]
     call = env.client.calls[-1]
     text = call["system"][0]["text"] + call["messages"][0]["content"]
-    assert "Zubeida" not in text and "9123456789" not in text and "RELIANCE" in text
+    assert "Zubeida" not in text and "9123456789" not in text   # Claude never sees who is asking
+    assert "portfolio" not in text.lower() and "profile" not in text.lower()
 
 
-def test_admin_list_shows_counts_not_holdings(web):
-    a = web.participant("Asha", "9000000001")
-    upload(a)
-    rows = web.admin().get("/api/admin/participants").json()["participants"]
-    row = next(r for r in rows if r["name"] == "Asha")
-    assert row["holdings_count"] == 2
-    assert "holdings" not in row and "RELIANCE" not in str(rows)
+def test_removed_personal_endpoints_are_gone(web):
+    a = web.participant()
+    assert a.get("/api/portfolio").status_code == 404
+    assert a.put("/api/me/profile", json={"risk_tolerance": "high"}).status_code in (404, 405)
 
 
 def test_csrf_header_required(web):
@@ -58,7 +34,7 @@ def test_csrf_header_required(web):
     bare = TestClient(web.app)
     bare.cookies = a.cookies
     assert bare.post("/api/auth/logout").status_code == 403
-    assert bare.delete("/api/portfolio").status_code == 403
+    assert bare.put("/api/me/notifications", json={"opt_in": True}).status_code == 403
 
 
 def test_session_cookie_flags(web):
@@ -84,9 +60,10 @@ def test_deactivated_user_loses_access(web):
 
 def test_deleted_user_data_is_gone(env, web):
     a = web.participant()
-    upload(a)
+    a.put("/api/me/notifications", json={"opt_in": True})
     web.admin().delete(f"/api/admin/participants/{a.user_id}")
-    assert env.service.store.get_portfolio(a.user_id) is None
+    assert env.service.store.get_user(a.user_id) is None
+    assert not env.service.store.opted_in_users()
     assert a.get("/api/me").status_code == 401
 
 
@@ -139,9 +116,3 @@ def test_per_user_analysis_quota(env, web):
     assert codes == [200, 200, 429]
     # cached results do not count
     assert c.post("/api/recommend", json={"instrument": "AAA", "horizon": "1d"}).status_code == 200
-
-
-def test_upload_size_limit(web):
-    c = web.participant()
-    r = upload(c, b"symbol,quantity\n" + b"X,1\n" * 300_000)
-    assert r.status_code in (413, 422)

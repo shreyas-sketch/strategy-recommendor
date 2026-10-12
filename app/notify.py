@@ -12,7 +12,6 @@ import asyncio
 import logging
 import os
 import re
-from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 
 import requests
@@ -20,7 +19,7 @@ import requests
 from .auth import mask_phone
 from .data.providers import now_ist
 from .llm.recommender import NO_TRADE
-from .portfolio import PortfolioAdvisor
+from .daily import DailyAdvisor
 from .service import today_ist
 
 log = logging.getLogger(__name__)
@@ -89,12 +88,11 @@ def message_params(user: dict, payload: dict) -> list[str]:
 
 
 class DailyJobs:
-    def __init__(self, advisor: PortfolioAdvisor, aisensy: AISensyClient | None = None, workers: int = 4):
+    def __init__(self, advisor: DailyAdvisor, aisensy: AISensyClient | None = None):
         self.advisor = advisor
         self.store = advisor.store
         self.settings = advisor.settings
         self.aisensy = aisensy or AISensyClient()
-        self.workers = workers
 
     # ---- schedule ---------------------------------------------------------
     def is_notify_day(self, now: datetime) -> bool:
@@ -141,38 +139,38 @@ class DailyJobs:
         return summary
 
     def prepare(self) -> dict:
-        """Pre-generate today's recommendation for every opted-in participant."""
+        """Pre-generate the day's pick (it is the same for every participant)."""
         users = self.store.opted_in_users()
-        ok = failed = 0
-        with ThreadPoolExecutor(max_workers=self.workers) as pool:
-            for result in pool.map(self._safe_today, [u["id"] for u in users]):
-                ok += result
-                failed += not result
-        return {"participants": len(users), "prepared": ok, "failed": failed}
-
-    def _safe_today(self, user_id: int) -> bool:
         try:
-            self.advisor.today(user_id)
-            return True
+            self.advisor.today()
+            return {"participants": len(users), "prepared": True}
         except Exception as exc:
-            log.warning("prepare failed for user %s: %s", user_id, type(exc).__name__)
-            return False
+            log.warning("prepare failed: %s", type(exc).__name__)
+            return {"participants": len(users), "prepared": False, "error": type(exc).__name__}
 
     def send_all(self) -> dict:
         day = today_ist()
         users = self.store.opted_in_users()
         counts = {"participants": len(users), "sent": 0, "skipped": 0, "failed": 0}
         campaign = self.settings.admin.aisensy_campaign
+        payload, error = None, None
+        if users:
+            try:
+                payload = self.advisor.today()
+            except Exception as exc:
+                error = f"error: {type(exc).__name__}"
+                log.warning("no pick to send: %s", type(exc).__name__)
         for user in users:
             if self.store.notified_today(user["id"], day):
                 counts["skipped"] += 1
                 continue
             try:
-                payload = self.advisor.today(user["id"])
+                if payload is None:
+                    raise RuntimeError(error)
                 ok, detail = self.aisensy.send(campaign=campaign, phone=user["phone"], user_name=user["name"],
                                                params=message_params(user, payload))
             except Exception as exc:
-                ok, detail = False, f"error: {type(exc).__name__}"
+                ok, detail = False, error or f"error: {type(exc).__name__}"
             self.store.log_notification(user["id"], day, "sent" if ok else "failed", detail)
             counts["sent" if ok else "failed"] += 1
             if not ok:

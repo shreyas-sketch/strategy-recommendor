@@ -42,9 +42,6 @@ avoid_conditions:
 - Sideways, choppy sessions — repeated whipsaws and premium decay
 - Very low volatility — option premiums barely move
 risk_notes: Bought options lose value through time decay; whipsaws in a range cause a string of small losses.
-risk_level: medium
-min_capital_inr: 100000
-min_experience: intermediate
 underlyings:
 - BANKNIFTY
 active_days: any

@@ -2,6 +2,8 @@ import json
 import shutil
 from pathlib import Path
 
+import yaml
+
 from app.config import Settings
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -28,11 +30,12 @@ def test_new_shipped_strategy_reaches_existing_volume(tmp_path):
     (data / "strategies").mkdir(parents=True)
     for name in ("bnf_15_min_super_trend_intraday_instant", "atm_roll_aggressive_diversified_kapoor",
                  "kc_trend_ride_nifty_bank_option_selling"):
-        text = (c / "strategies" / f"{name}.yaml").read_text().replace("risk_level: high", "risk_level: medium")
-        (data / "strategies" / f"{name}.yaml").write_text(text)          # admin-edited copies
+        doc = yaml.safe_load((c / "strategies" / f"{name}.yaml").read_text())
+        doc["risk_notes"] = "EDITED."
+        (data / "strategies" / f"{name}.yaml").write_text(yaml.safe_dump(doc))   # admin-edited copies
     s = Settings(config_dir=c, data_dir=data)
     assert set(s.strategies) == SHIPPED
-    assert s.strategies["kc_trend_ride_nifty_bank_option_selling"].risk_level == "medium"   # edits kept
+    assert s.strategies["kc_trend_ride_nifty_bank_option_selling"].risk_notes == "EDITED."   # edits kept
 
 
 def test_deleted_shipped_strategy_stays_deleted(tmp_path):

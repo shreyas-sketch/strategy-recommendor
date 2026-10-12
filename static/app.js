@@ -3,22 +3,15 @@ let todayLoaded = false;
 
 function showTab(tab) {
   document.querySelectorAll("#tabs button").forEach((b) => b.classList.toggle("on", b.dataset.tab === tab));
-  ["today", "portfolio", "market", "settings"].forEach((t) => $(`tab-${t}`).classList.toggle("hidden", t !== tab));
+  ["today", "market", "settings"].forEach((t) => $(`tab-${t}`).classList.toggle("hidden", t !== tab));
   $("error").classList.add("hidden");
   if (tab === "today" && !todayLoaded) loadToday();
-  if (tab === "portfolio") loadPortfolio();
   try { sessionStorage.setItem("sr_tab", tab); } catch {}
 }
 
 async function loadMe() {
   const me = await api("/api/me");
   $("who").textContent = me.name;
-  $("today-empty").classList.toggle("hidden", me.has_portfolio);
-  $("profile-nudge").classList.toggle("hidden", !!me.profile);
-  if (me.profile) {
-    $("pf-risk").value = me.profile.risk_tolerance; $("pf-exp").value = me.profile.experience;
-    $("pf-capital").value = me.profile.capital_inr; $("pf-fno").checked = me.profile.fno_enabled;
-  }
   $("opt-in").checked = me.notify_opt_in;
   $("opt-in").disabled = !me.phone;
   $("opt-in-label").textContent = me.phone ? `Send me today's strategy on WhatsApp (${me.phone}) at ${me.notify_time}`
@@ -34,42 +27,11 @@ async function loadToday() {
   $("today-result").innerHTML = "";
   try {
     const payload = await api("/api/me/today");
-    $("today-result").innerHTML = recHTML(payload, { personal: true });
+    $("today-result").innerHTML = recHTML(payload, { daily: true });
     todayLoaded = true;
   } catch (err) { showError($("error"), err); }
   finally { $("today-loading").classList.add("hidden"); }
 }
-
-async function loadPortfolio() {
-  const { portfolio } = await api("/api/portfolio");
-  $("holdings-card").classList.toggle("hidden", !portfolio);
-  if (!portfolio) return;
-  $("holdings-meta").textContent = `${portfolio.holdings.length} holdings · from ${portfolio.source_name || "upload"} · ${new Date(portfolio.uploaded).toLocaleString()}`;
-  $("holdings").innerHTML = `<tr><th>Symbol</th><th class="num">Quantity</th><th class="num">Avg price</th></tr>` +
-    portfolio.holdings.map((h) => `<tr><td>${esc(h.symbol)}</td><td class="num">${esc(h.quantity)}</td><td class="num">${esc(h.avg_price ?? "—")}</td></tr>`).join("");
-  const u = portfolio.unresolved || [];
-  $("unresolved").classList.toggle("hidden", !u.length);
-  $("unresolved").textContent = u.length ? `Could not match ${u.length} row(s) to an NSE symbol and skipped them: ${u.join(", ")}. Use the template CSV with trading symbols to include them.` : "";
-}
-
-$("upload").onclick = async () => {
-  const f = $("file").files[0];
-  if (!f) return showError($("error"), "Choose a file first");
-  const fd = new FormData(); fd.append("file", f);
-  $("upload").disabled = true;
-  try {
-    await api("/api/portfolio", { method: "POST", body: fd });
-    $("file").value = ""; todayLoaded = false;
-    await Promise.all([loadPortfolio(), loadMe()]);
-  } catch (err) { showError($("error"), err); }
-  finally { $("upload").disabled = false; }
-};
-
-$("delete-portfolio").onclick = async () => {
-  if (!confirm("Delete your uploaded portfolio?")) return;
-  try { await api("/api/portfolio", { method: "DELETE" }); todayLoaded = false; await Promise.all([loadPortfolio(), loadMe()]); }
-  catch (err) { showError($("error"), err); }
-};
 
 $("opt-in").onchange = async (e) => {
   try { await api("/api/me/notifications", { method: "PUT", json: { opt_in: e.target.checked } }); }
@@ -82,20 +44,6 @@ $("pw-form").addEventListener("submit", async (e) => {
     await api("/api/me/password", { method: "POST", json: { current_password: $("pw-cur").value, new_password: $("pw-new").value } });
     $("pw-msg").textContent = "Password updated. Other devices were signed out."; e.target.reset();
   } catch (err) { $("pw-msg").textContent = err.message; }
-});
-
-$("go-settings").onclick = (e) => { e.preventDefault(); showTab("settings"); };
-
-$("profile-form").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  $("pf-msg").textContent = "";
-  try {
-    await api("/api/me/profile", { method: "PUT", json: {
-      risk_tolerance: $("pf-risk").value, experience: $("pf-exp").value,
-      capital_inr: Math.round(Number($("pf-capital").value || 0)), fno_enabled: $("pf-fno").checked } });
-    $("pf-msg").textContent = "Saved. Today's recommendation will be refreshed for your profile.";
-    todayLoaded = false; await loadMe();
-  } catch (err) { $("pf-msg").textContent = err.message; }
 });
 
 $("logout").onclick = async () => { await api("/api/auth/logout", { method: "POST" }).catch(() => {}); location.href = "/login"; };
@@ -147,5 +95,6 @@ $("tabs").addEventListener("click", (e) => { const b = e.target.closest("button"
   initMarket();
   let tab = "today";
   try { tab = sessionStorage.getItem("sr_tab") || "today"; } catch {}
+  if (!$(`tab-${tab}`)) tab = "today";   // e.g. a remembered tab that no longer exists
   showTab(tab);
 })();

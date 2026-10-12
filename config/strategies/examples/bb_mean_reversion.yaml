@@ -21,7 +21,3 @@ avoid_conditions:
 risk_notes: >
   One strong trend day can wipe out many small wins.
 
-# Suitability: participants below these never get this strategy.
-risk_level: medium
-min_capital_inr: 25000
-min_experience: intermediate

@@ -58,9 +58,6 @@ avoid_conditions:
 - Strong trending or gap days — one leg runs away
 - Volatility expanding or event days (RBI policy, budget, results)
 risk_notes: 'Naked short options: losses are open-ended on a large move; margin-heavy.'
-risk_level: high
-min_capital_inr: 600000
-min_experience: advanced
 underlyings:
 - NIFTY50
 - SENSEX

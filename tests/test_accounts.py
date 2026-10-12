@@ -214,5 +214,29 @@ def test_migrates_old_users_table(tmp_path):
     s = Store(db)
     assert s.get_user_by_phone("919000000001")["name"] == "Old"
     uid = s.create_user("New", None, "new@gmail.com")
-    s.save_portfolio(uid, [{"symbol": "INFY", "quantity": 1, "avg_price": None}], [], "x")   # FKs still work
-    assert s.get_portfolio(uid)["holdings"][0]["symbol"] == "INFY"
+    s.update_user(uid, notify_opt_in=1)
+    assert s.take_quota(uid, "2026-10-12", "analysis", 1)      # FKs still work
+    s.delete_user(uid)
+    assert s.get_user(uid) is None
+
+
+def test_migration_deletes_stored_portfolios_and_profiles(tmp_path):
+    """Earlier versions stored holdings and trading profiles; recommendations are market-only now."""
+    db = tmp_path / "v2.db"
+    con = sqlite3.connect(db)
+    con.executescript("""
+        CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, phone TEXT UNIQUE,
+            email TEXT UNIQUE, password_hash TEXT, active INTEGER NOT NULL DEFAULT 1,
+            notify_opt_in INTEGER NOT NULL DEFAULT 0, created TEXT NOT NULL, last_login TEXT, profile TEXT);
+        INSERT INTO users (name, phone, created, profile) VALUES ('Old', '919000000001', '2026-01-01', '{"risk":"high"}');
+        CREATE TABLE portfolios (user_id INTEGER PRIMARY KEY, holdings TEXT NOT NULL, uploaded TEXT NOT NULL);
+        INSERT INTO portfolios VALUES (1, '[{"symbol":"INFY"}]', '2026-01-01');
+        CREATE TABLE daily_recs (user_id INTEGER, day TEXT, payload TEXT, created REAL);
+    """)
+    con.commit(); con.close()
+    from app.store import Store
+    s = Store(db)
+    assert s.get_user_by_phone("919000000001")["name"] == "Old"
+    tables = {r["name"] for r in s._all("SELECT name FROM sqlite_master WHERE type = 'table'")}
+    assert not {"portfolios", "daily_recs"} & tables
+    assert "profile" not in s.get_user_by_phone("919000000001")

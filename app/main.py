@@ -20,8 +20,7 @@ from . import auth, oauth
 from .config import IS_PRODUCTION, ROOT, AdminSettings, Horizon, Settings, Strategy
 from .data.base import ProviderError
 from .notify import AISensyClient, DailyJobs, scheduler_loop, send_login_code
-from .portfolio import TEMPLATE_CSV, GrowwIsinResolver, PortfolioAdvisor, PortfolioError, parse_portfolio
-from .profile import TradingProfile, apply_profile, split
+from .daily import DailyAdvisor
 from .expiries import ExpiryCalendar
 from .tradetron import TradetronError, analyse as analyse_tradetron, load_export
 from .service import BudgetExceeded, QuotaExceeded, RecommendationService, today_ist
@@ -128,7 +127,7 @@ def check_production_config() -> None:
     if os.environ.get("COOKIE_SECURE") == "0":
         raise RuntimeError("COOKIE_SECURE=0 is not allowed in production")
     if not (os.environ.get("SR_DATA_DIR") or os.environ.get("RAILWAY_VOLUME_MOUNT_PATH")):
-        log.warning("No volume attached: participants, portfolios and settings will be LOST on every redeploy. "
+        log.warning("No volume attached: participants, admins and settings will be LOST on every redeploy. "
                     "Attach a Railway volume (e.g. mounted at /data).")
 
 
@@ -141,9 +140,8 @@ def create_app(settings: Settings | None = None, service: RecommendationService 
     bootstrap_master_admin(store)
     if service.calendar is None and os.environ.get("EXPIRY_CALENDAR", "1") != "0":
         service.calendar = ExpiryCalendar(settings)
-    advisor = jobs.advisor if jobs else PortfolioAdvisor(service)
+    advisor = jobs.advisor if jobs else DailyAdvisor(service)
     jobs = jobs or DailyJobs(advisor, AISensyClient())
-    isin_resolver = GrowwIsinResolver(settings.data_dir)
     if start_scheduler is None:
         start_scheduler = os.environ.get("SCHEDULER_ENABLED", "1") != "0"
 
@@ -342,17 +340,10 @@ def create_app(settings: Settings | None = None, service: RecommendationService 
     # ---- participant: self ------------------------------------------------
     @app.get("/api/me")
     def me(user: dict = Depends(current_user)):
-        portfolio = store.get_portfolio(user["id"])
         return {"name": user["name"], "phone": auth.mask_phone(user["phone"]) if user["phone"] else None,
                 "email": user["email"],
                 "notify_opt_in": bool(user["notify_opt_in"]),
-                "notifications_live": settings.admin.notify_enabled, "notify_time": settings.admin.notify_time,
-                "has_portfolio": bool(portfolio), "profile": store.get_profile(user["id"])}
-
-    @app.put("/api/me/profile")
-    def set_profile(profile: TradingProfile, user: dict = Depends(current_user)):
-        store.set_profile(user["id"], profile.model_dump())
-        return {"profile": profile.model_dump()}
+                "notifications_live": settings.admin.notify_enabled, "notify_time": settings.admin.notify_time}
 
     @app.put("/api/me/notifications")
     def set_notifications(pref: NotifyPref, user: dict = Depends(current_user)):
@@ -372,38 +363,11 @@ def create_app(settings: Settings | None = None, service: RecommendationService 
         set_session(response, user["id"])
         return {"ok": True}
 
-    # ---- participant: portfolio (always scoped to the session user) ---------
-    @app.get("/api/portfolio")
-    def get_portfolio(user: dict = Depends(current_user)):
-        return {"portfolio": store.get_portfolio(user["id"])}
-
-    @app.post("/api/portfolio")
-    async def upload_portfolio(file: UploadFile = File(...), user: dict = Depends(current_user)):
-        data = await file.read(1_000_001)
-        if not store.take_quota(user["id"], today_ist(), "upload", settings.admin.per_user_daily_uploads):
-            raise HTTPException(429, "Upload limit reached for today")
-        try:
-            holdings, unresolved = await asyncio.to_thread(parse_portfolio, file.filename or "", data, isin_resolver)
-        except PortfolioError as exc:
-            raise HTTPException(422, str(exc))
-        source = re.sub(r"[^\w.\- ]", "", os.path.basename(file.filename or "upload"))[:80]
-        store.save_portfolio(user["id"], holdings, unresolved, source)
-        return {"portfolio": store.get_portfolio(user["id"])}
-
-    @app.delete("/api/portfolio")
-    def delete_portfolio(user: dict = Depends(current_user)):
-        store.delete_portfolio(user["id"])
-        return {"ok": True}
-
-    @app.get("/api/portfolio/template.csv")
-    def portfolio_template():
-        return PlainTextResponse(TEMPLATE_CSV, media_type="text/csv",
-                                 headers={"Content-Disposition": 'attachment; filename="portfolio_template.csv"'})
-
     @app.get("/api/me/today")
     def my_today(user: dict = Depends(current_user)):
+        # Market data only: every participant gets the same pick for the session.
         try:
-            return advisor.today(user["id"])
+            return advisor.today()
         except BudgetExceeded as exc:
             raise HTTPException(402, str(exc))
         except ProviderError:
@@ -442,16 +406,8 @@ def create_app(settings: Settings | None = None, service: RecommendationService 
             raise HTTPException(422, "instrument must be a plain symbol like NIFTY50 or RELIANCE")
         try:
             # Bypassing the cache costs money, so only the admin may force a fresh analysis.
-            payload = service.recommend(req.instrument, req.horizon, force_refresh=req.force_refresh and is_admin,
-                                        quota_user=None if is_admin else user["id"])
-            # The analysis is shared across participants; suitability is applied per person on top.
-            raw = store.get_profile(user["id"]) if user else None
-            if raw:
-                strategies = settings.strategies_for(req.horizon)
-                eligible, excluded = split(strategies, TradingProfile(**raw))
-                payload = {**payload, "recommendation": apply_profile(
-                    payload["recommendation"], {s.id for s in eligible}, excluded, {s.id: s.name for s in strategies})}
-            return payload
+            return service.recommend(req.instrument, req.horizon, force_refresh=req.force_refresh and is_admin,
+                                     quota_user=None if is_admin else user["id"])
         except BudgetExceeded as exc:
             raise HTTPException(402, str(exc))
         except QuotaExceeded as exc:
@@ -699,13 +655,12 @@ def create_app(settings: Settings | None = None, service: RecommendationService 
                          if (st.source or {}).get("original_name") == data.get("name") or st.id == draft["id"]), None)
         warnings = result["warnings"]
         if existing:
-            kept = ("description", "ideal_conditions", "avoid_conditions", "risk_notes", "risk_level",
-                    "min_experience", "horizons", "category")
+            kept = ("description", "ideal_conditions", "avoid_conditions", "risk_notes", "horizons", "category")
             draft = {**draft, **{k: getattr(existing, k) for k in kept}, "id": existing.id}
             draft["ideal_conditions"] = existing.ideal_conditions.model_dump()
             warnings = [w for w in warnings if not w.startswith("Ideal market conditions")]
-            warnings.insert(0, f"Updates the existing strategy '{existing.name}': the logic, underlyings and capital "
-                               "come from this file; your reviewed conditions and suitability are kept.")
+            warnings.insert(0, f"Updates the existing strategy '{existing.name}': the logic and underlyings "
+                               "come from this file; your reviewed conditions are kept.")
         try:
             Strategy(**draft)
         except ValidationError as exc:
@@ -723,7 +678,6 @@ def create_app(settings: Settings | None = None, service: RecommendationService 
         return {"loaded": sorted(loaded)}
 
     # ---- admin: participants ----------------------------------------------
-    # The admin sees who has a portfolio and how many holdings, never the holdings themselves.
     @app.get("/api/admin/participants", dependencies=[Depends(require_admin)])
     def list_participants():
         return {"participants": store.list_users()}
@@ -805,7 +759,7 @@ def create_app(settings: Settings | None = None, service: RecommendationService 
     def delete_participant(user_id: int):
         if not store.get_user(user_id):
             raise HTTPException(404, "Unknown participant")
-        store.delete_user(user_id)   # cascades to sessions, portfolio, recommendations, logs
+        store.delete_user(user_id)   # cascades to sessions, quotas, logs
         return {"deleted": user_id}
 
     # ---- admin: expiry calendar --------------------------------------------

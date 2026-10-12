@@ -123,21 +123,6 @@ class RecommendationService:
         self._snapshots.put(key, result, now)
         return result
 
-    def symbol_daily(self, symbol: str) -> dict | None:
-        """Daily-candle snapshot for one stock (used for portfolio holdings); cached for 6 hours."""
-        key = ("daily", symbol)
-        now = self.clock()
-        hit = self._snapshots.get(key, 6 * 3600, now)
-        if hit is not None:
-            return hit or None
-        try:
-            snap, _ = self.market_snapshot(self.settings.instrument(symbol), "1m")
-        except Exception as exc:
-            log.info("no daily data for a holding: %s", type(exc).__name__)
-            snap = {}
-        self._snapshots.put(key, snap, now)
-        return snap or None
-
     def call_claude(self, fn, *, label: str, horizon: str, **kwargs) -> tuple[object, dict]:
         """Run a recommender call on the currently resolved model and record its cost."""
         engine = self.resolve_engine()

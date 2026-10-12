@@ -9,7 +9,6 @@ from app.expiries import ExpiryCalendar, schedule_check
 
 IST = ZoneInfo("Asia/Kolkata")
 FIX = Path(__file__).parent / "fixtures" / "tradetron"
-PRO = {"risk_tolerance": "high", "experience": "advanced", "capital_inr": 1_000_000, "fno_enabled": True}
 CALENDAR = {   # NIFTY weekly on Tuesdays, SENSEX weekly on Thursdays, BANKNIFTY monthly only
     "NIFTY": ["2026-10-06", "2026-10-13", "2026-10-20", "2026-10-27", "2026-11-03", "2026-11-24"],
     "SENSEX": ["2026-10-08", "2026-10-15", "2026-10-22", "2026-10-29", "2026-11-26"],
@@ -33,11 +32,11 @@ def clock(d):
 
 
 def pin_trading_day(monkeypatch, day):
-    import app.portfolio
+    import app.daily
     import app.service
     d = date.fromisoformat(day)
     monkeypatch.setattr(app.service, "trading_day", lambda holidays=(), now=None: d)
-    monkeypatch.setattr(app.portfolio, "trading_day", lambda holidays=(), now=None: d)
+    monkeypatch.setattr(app.daily, "trading_day", lambda holidays=(), now=None: d)
 
 
 @pytest.fixture
@@ -98,7 +97,6 @@ def test_schedule_check(env, web):
 def test_daily_pick_drops_strategy_on_non_trading_day(env, web, cal):
     _install(web)
     c = web.participant()
-    c.put("/api/me/profile", json=PRO)
     rec = c.get("/api/me/today").json()
     excluded = {e["strategy_id"]: e for e in rec["recommendation"]["excluded"]}
     assert excluded["atm_roll_aggressive_diversified_kapoor"]["kind"] == "schedule"
@@ -113,7 +111,6 @@ def test_daily_pick_keeps_strategy_on_expiry_day(env, web, monkeypatch):
     env.service.calendar = ExpiryCalendar(env.settings, groww=FakeGroww(), clock=clock("2026-10-19"))
     pin_trading_day(monkeypatch, "2026-10-19")
     c = web.participant()
-    c.put("/api/me/profile", json=PRO)
     rec = c.get("/api/me/today").json()["recommendation"]
     assert "atm_roll_aggressive_diversified_kapoor" not in {e["strategy_id"] for e in rec["excluded"]}
 
@@ -165,9 +162,7 @@ def test_run_on_forced_to_strategys_index(env, web, cal):
     for sid in [k for k, st in env.settings.strategies.items() if not st.underlyings]:
         env.settings.delete_strategy(sid)
     c = web.participant()
-    c.put("/api/me/profile", json=PRO)
-    c.post("/api/portfolio", files={"file": ("p.csv", b"symbol,quantity\nRELIANCE,10\n", "text/csv")})
-    rec = c.get("/api/me/today").json()["recommendation"]      # fake model says run_on="RELIANCE"
+    rec = c.get("/api/me/today").json()["recommendation"]      # fake model says run_on="NIFTY 50"
     assert rec["top_strategy_id"].startswith(("bnf_", "kc_")) and rec["run_on"] == "NIFTY BANK"
 
 

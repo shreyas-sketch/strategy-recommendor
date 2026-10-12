@@ -21,7 +21,3 @@ avoid_conditions:
 risk_notes: >
   False breakouts in quiet markets; slippage on fast opens.
 
-# Suitability: participants below these never get this strategy.
-risk_level: medium
-min_capital_inr: 50000
-min_experience: intermediate

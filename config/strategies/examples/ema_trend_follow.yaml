@@ -21,7 +21,3 @@ avoid_conditions:
 risk_notes: >
   Gives back profits at trend reversals; many small losses in ranges.
 
-# Suitability: participants below these never get this strategy.
-risk_level: medium
-min_capital_inr: 50000
-min_experience: beginner

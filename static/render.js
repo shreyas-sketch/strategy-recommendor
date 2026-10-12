@@ -1,12 +1,12 @@
-// Renders a recommendation payload (market or personal) as HTML. All values are escaped.
+// Renders a recommendation payload (market check or the shared daily pick) as HTML. All values are escaped.
 
-function recHTML(payload, { personal = false } = {}) {
+function recHTML(payload, { daily = false } = {}) {
   const { recommendation: r, strategies, meta } = payload;
   const name = (id) => strategies[id]?.name || id;
   const noTrade = r.top_strategy_id === "NO_TRADE";
   const top = r.rankings.find((x) => x.strategy_id === r.top_strategy_id);
   const forDay = (d) => d ? new Date(d + "T00:00:00").toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" }) : "";
-  const scope = personal ? `For you · trading on ${esc(forDay(meta.day))}`
+  const scope = daily ? `For trading on ${esc(forDay(meta.day))}`
     : `${esc(meta.instrument_label)} · ${esc(meta.horizon)}${meta.trading_day ? ` · for trading on ${esc(forDay(meta.trading_day))}` : ""}`;
 
   const notice = meta.note ? `<div class="notice" style="margin-bottom:16px">${esc(meta.note)}</div>` : "";
@@ -18,12 +18,10 @@ function recHTML(payload, { personal = false } = {}) {
          <div>${esc(r.why || top?.why)}</div>
          <div class="muted small" style="margin-top:6px">Watch out: ${esc(top?.watch_out)}</div></section>`;
 
-  const summary = personal
-    ? `<section class="card"><h2>${meta.has_portfolio ? "Your portfolio today" : "Today's markets"}</h2><p style="margin-top:0">${esc(r.portfolio_summary)}</p>
-         ${expiryLine(payload.expiries, payload.markets)}
-         <p class="muted">${esc(r.market_summary || "")}</p>
-         ${(r.portfolio_risks || []).length ? `<ul>${r.portfolio_risks.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}
-         ${payload.context ? holdingsTable(payload.context) : ""}</section>`
+  const summary = daily
+    ? `<section class="card"><h2>Today's markets</h2><p style="margin-top:0">${esc(r.market_summary || "")}</p>
+         ${marketsTable(payload.markets)}
+         ${expiryLine(payload.expiries, payload.markets)}</section>`
     : regimeCard(payload.snapshot, r.market_summary);
 
   const ranked = r.rankings.map((a) => `
@@ -35,21 +33,17 @@ function recHTML(payload, { personal = false } = {}) {
       ${a.vs_top && a.strategy_id !== r.top_strategy_id ? `<div class="small vs">vs top pick: ${esc(a.vs_top)}</div>` : ""}
     </div>`).join("");
 
-  const footer = personal
+  const footer = daily
     ? `${meta.engine === "claude" ? "AI analysis" : "Rule engine"} · markets analysed: ${esc((meta.markets || [meta.benchmark]).join(", "))} · data: ${esc(meta.data_provider)}`
     : `${meta.engine === "claude" ? `AI: ${esc(meta.model)}` : "Rule engine"} · data: ${esc(meta.data_provider)} · as of ${esc(new Date(payload.snapshot.as_of).toLocaleString())}${meta.cached ? ` · cached ${Math.round(meta.cache_age_s / 60)} min ago` : ""}`;
 
-  const kinds = new Set((r.excluded || []).map((x) => x.kind || "profile"));
-  const exTitle = kinds.has("schedule") && kinds.has("profile") ? "Not available to you today"
-    : kinds.has("schedule") ? "Not trading today" : "Not suitable for your profile";
-  const exNote = kinds.has("profile") ? "Profile exclusions are never recommended to you — update your profile in Settings if it has changed. " : "";
-  const excluded = (r.excluded || []).length ? `<section class="card"><h2>${exTitle}</h2>
-      <p class="muted small" style="margin-top:0">${exNote}${kinds.has("schedule") ? "Some strategies only trade on expiry days (exchange calendar via Groww)." : ""}</p>
-      ${r.excluded.map((x) => `<div class="strat"><b>${esc(name(x.strategy_id))}</b> <span class="pill ${x.kind === "schedule" ? "conditional" : "avoid"}">${x.kind === "schedule" ? "schedule" : "profile"}</span>
+  const excluded = (r.excluded || []).length ? `<section class="card"><h2>Not trading in this session</h2>
+      <p class="muted small" style="margin-top:0">Some strategies only trade on expiry days (exchange calendar via Groww).</p>
+      ${r.excluded.map((x) => `<div class="strat"><b>${esc(name(x.strategy_id))}</b> <span class="pill conditional">schedule</span>
         <ul class="small reasons">${x.reasons.map((why) => `<li>${esc(why)}</li>`).join("")}</ul></div>`).join("")}</section>` : "";
 
   return notice + topCard + comparisonHTML(r, name, noTrade) + summary +
-    (ranked ? `<section class="card"><h2>${(r.excluded || []).length ? "Strategies that suit you, ranked" : "All strategies, ranked"}</h2>${ranked}</section>` : "") +
+    (ranked ? `<section class="card"><h2>${(r.excluded || []).length ? "Strategies trading this session, ranked" : "All strategies, ranked"}</h2>${ranked}</section>` : "") +
     excluded +
     ((r.reassess_if || []).length ? `<section class="card"><h2>Re-check if…</h2><ul>${r.reassess_if.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></section>` : "") +
     `<p class="muted small">${footer}</p>`;
@@ -92,11 +86,10 @@ function regimeCard(s, summary) {
     <p style="margin:12px 0 0">${esc(summary)}</p></section>`;
 }
 
-function holdingsTable(ctx) {
-  const rows = ctx.holdings.map((h) => `<tr><td>${esc(h.symbol)}</td><td class="num">${esc(h.weight_pct)}%</td>
-    <td>${esc(h.trend || "—")}${h.trend_strength ? ` <span class="muted small">(${esc(h.trend_strength)})</span>` : ""}</td>
-    <td class="num">${h.return_22d_pct ?? "—"}${h.return_22d_pct != null ? "%" : ""}</td>
-    <td class="num">${h.unrealised_pnl_pct ?? "—"}${h.unrealised_pnl_pct != null ? "%" : ""}</td></tr>`).join("");
-  return `<div class="table-scroll"><table><tr><th>Holding</th><th class="num">Weight</th><th>Trend</th><th class="num">1-month</th><th class="num">P&amp;L</th></tr>${rows}</table></div>
-    <p class="muted small">Largest ${ctx.portfolio_stats.holdings_analysed} of ${ctx.portfolio_stats.holdings_total} holdings analysed.</p>`;
+function marketsTable(markets) {
+  const rows = Object.values(markets || {}).map((m) => `<tr><td>${esc(m.instrument)}</td>
+    <td>${esc(m.regime?.trend || "—")}${m.regime?.trend_strength ? ` <span class="muted small">(${esc(m.regime.trend_strength)})</span>` : ""}</td>
+    <td>${esc(m.regime?.volatility || "—")}</td><td class="num">${esc(m.primary?.adx ?? "—")}</td>
+    <td class="num">${m.primary?.window_return_pct ?? "—"}${m.primary?.window_return_pct != null ? "%" : ""}</td></tr>`).join("");
+  return rows ? `<div class="table-scroll"><table><tr><th>Index</th><th>Trend</th><th>Volatility</th><th class="num">ADX</th><th class="num">Return</th></tr>${rows}</table></div>` : "";
 }

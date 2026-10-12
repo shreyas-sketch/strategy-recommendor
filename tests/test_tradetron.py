@@ -6,7 +6,6 @@ from app.config import Strategy
 from app.tradetron import TradetronError, analyse, load_export
 
 FIX = Path(__file__).parent / "fixtures" / "tradetron"
-PRO = {"risk_tolerance": "high", "experience": "advanced", "capital_inr": 1_000_000, "fno_enabled": True}
 
 
 def draft(name):
@@ -18,7 +17,8 @@ def test_supertrend_option_buyer():
     d = r["draft"]
     Strategy(**d)
     assert d["underlyings"] == ["BANKNIFTY"] and d["instruments"] == ["options"]
-    assert d["category"] == "trend" and d["risk_level"] == "medium" and d["min_capital_inr"] == 100000
+    assert d["category"] == "trend" and "risk_level" not in d and "min_capital_inr" not in d
+    assert "Capital required (per Tradetron): ₹100,000." in d["logic"]
     assert "BUY 1 lot NIFTY BANK CE ATM+2 strike" in d["logic"] and "PE ATM-2" in d["logic"]
     assert "Supertrend(10, 3)" in d["logic"] and "closed by 15:14" in d["logic"]
     assert "the time is before 09:30" in d["logic"]
@@ -27,7 +27,6 @@ def test_supertrend_option_buyer():
 def test_atm_roll_straddle_seller():
     d = draft("atm_roll")["draft"]
     assert d["underlyings"] == ["NIFTY50", "SENSEX"] and d["category"] == "volatility_selling"
-    assert d["risk_level"] == "high" and d["min_experience"] == "advanced" and d["min_capital_inr"] == 600000
     assert d["ideal_conditions"]["trend"] == ["sideways"]
     assert "combined premium of NIFTY 50 current week ATM CE + NIFTY 50 current week ATM PE" in d["logic"]
     assert "days from today to the NIFTY 50 current weekly expiry equals 1" in d["logic"]
@@ -36,7 +35,7 @@ def test_atm_roll_straddle_seller():
 
 def test_kc_runtime_signals_flagged():
     r = draft("kc_trend_ride")
-    assert r["draft"]["underlyings"] == ["BANKNIFTY"] and r["draft"]["risk_level"] == "high"
+    assert r["draft"]["underlyings"] == ["BANKNIFTY"]
     assert any("BANKNIFTY_key1" in w for w in r["warnings"])
     assert "SELL 1 lot NIFTY BANK PE ATM" in r["draft"]["logic"]
 
@@ -93,17 +92,16 @@ def test_daily_pick_uses_each_strategys_index(env, web):
     for sid in [s for s, st in env.settings.strategies.items() if not st.underlyings]:
         env.settings.delete_strategy(sid)
     a = web.participant("Asha", "9000000001")
-    a.put("/api/me/profile", json=PRO)
     out = a.get("/api/me/today").json()
     assert set(out["markets"]) == {"BANKNIFTY", "NIFTY50", "SENSEX"}
     msg = env.client.calls[-1]["messages"][0]["content"]
-    assert '"underlying_markets"' in msg and '"weekday"' in msg and '"portfolio": null' in msg
-    # same profile, no portfolio -> the AI answer is shared
+    assert '"underlying_markets"' in msg and '"weekday"' in msg 
+    assert "portfolio" not in msg and "profile" not in msg            # market data only
+    # everyone gets the same pick from one AI call
     b = web.participant("Bilal", "9000000002")
-    b.put("/api/me/profile", json=PRO)
     calls = len(env.client.calls)
     shared = b.get("/api/me/today").json()
-    assert len(env.client.calls) == calls and shared["meta"]["shared"] is True
+    assert len(env.client.calls) == calls
     assert shared["recommendation"]["top_strategy_id"] == out["recommendation"]["top_strategy_id"]
 
 
@@ -134,7 +132,7 @@ def test_options_list_only_traded_indices(env, web):
 
 def test_itm_seller_and_moneyness_labels():
     d = draft("bnf_supertrend_5m_sell_itm")["draft"]
-    assert d["underlyings"] == ["BANKNIFTY"] and d["risk_level"] == "high" and d["min_capital_inr"] == 225000
+    assert d["underlyings"] == ["BANKNIFTY"]
     assert "SELL 1 lot NIFTY BANK PE ATM+2 strike (spot-based) = 2 strikes in the money" in d["logic"]
     assert "SELL 1 lot NIFTY BANK CE ATM-2 strike (spot-based) = 2 strikes in the money" in d["logic"]
     assert "Supertrend(10, 3)" in d["logic"] and "5m candles" in d["logic"] and "Tradetron tags: EarnTheta" in d["logic"]

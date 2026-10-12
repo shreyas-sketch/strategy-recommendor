@@ -80,7 +80,6 @@
         <div><label for="c1m">1M (min)</label><input id="c1m" type="number" min="0" size="6"></div>
         <div><label for="providers">Data provider order</label><input id="providers" size="28"></div>
         <div><label for="q-analyses">Fresh analyses / participant / day</label><input id="q-analyses" type="number" min="0" size="6"></div>
-        <div><label for="q-uploads">Uploads / participant / day</label><input id="q-uploads" type="number" min="0" size="6"></div>
         <button class="primary" id="save-budget">Save</button>
       </div>
       <p class="muted small">Re-using results means 100 participants checking NIFTY 50 in the same 15 minutes cost one AI call, not 100.</p>
@@ -106,7 +105,7 @@
         <button id="invite-csv" style="margin-top:8px">Download links as CSV</button>
       </div>
       <div class="table-scroll" style="margin-top:14px"><table id="participants"></table></div>
-      <p class="muted small">Portfolios are private to each participant — the admin sees only whether one is uploaded and how many holdings it has.</p>
+      <p class="muted small">Recommendations use market data only — participants enter nothing about themselves, and everyone gets the same daily pick.</p>
     </section>
 
     <section class="card master-only">
@@ -218,14 +217,6 @@
           <label for="f-squeeze">Bollinger squeeze</label>
           <select id="f-squeeze"><option value="any">Doesn't matter</option><option value="true">Needs a squeeze</option><option value="false">Avoid squeezes</option></select>
         </div>
-        <fieldset class="full"><legend>Who it suits (hard filter — participants below these never get it)</legend>
-          <div class="form-grid">
-            <div><label for="f-risklevel">Risk level</label><select id="f-risklevel"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></div>
-            <div><label for="f-mincap">Minimum capital (₹, incl. margin)</label><input id="f-mincap" type="number" min="0" step="1000"></div>
-            <div><label for="f-minexp">Minimum experience</label><select id="f-minexp"><option value="beginner">Beginner</option><option value="intermediate">Intermediate</option><option value="advanced">Advanced</option></select></div>
-          </div>
-          <p class="muted small" style="margin:6px 0 0">Strategies whose instruments are only options/futures also require the participant to have an F&amp;O account.</p>
-        </fieldset>
         <div class="full"><label for="f-avoid">Avoid when… (one per line)</label><textarea id="f-avoid" rows="3"></textarea></div>
         <div class="full"><label for="f-risk">Risk notes</label><textarea id="f-risk" rows="2"></textarea></div>
         <p class="muted small full" style="margin:0">Leaving a condition group empty means "any". Saved strategies are used by the next analysis.</p>

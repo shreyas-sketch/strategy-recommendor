@@ -35,9 +35,6 @@ avoid_conditions:
 - Sharp reversals against the position
 - Choppy days that flip the signal repeatedly
 risk_notes: 'Sells naked options in the trend direction: collects premium but a fast reversal causes large losses.'
-risk_level: high
-min_capital_inr: 100000
-min_experience: advanced
 underlyings:
 - BANKNIFTY
 active_days: any
