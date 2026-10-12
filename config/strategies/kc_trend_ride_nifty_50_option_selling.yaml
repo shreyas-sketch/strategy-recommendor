@@ -1,0 +1,46 @@
+# Imported from Tradetron export "KC Trend ride Nifty 50 option selling intraday".
+# Ideal conditions were suggested from the strategy's structure — review them.
+# ACTION NEEDED: entries come from runtime variables NIFTY_key1 / NIFTY_key2 set outside this
+# export. Add what sets them (e.g. the Keltner Channel rule) to `logic` so the recommender can judge it.
+id: kc_trend_ride_nifty_50_option_selling
+name: KC Trend ride Nifty 50 option selling intraday
+category: trend
+instruments:
+- options
+horizons:
+- 1d
+- 1w
+description: 'Directional ATM option selling on NIFTY 50 (intraday): sells an ATM put in an up-signal and an ATM call
+  in a down-signal from the external Keltner Channel trend rule; exits on the opposite signal or at 15:15.'
+logic: "Style: Directional option selling on NIFTY 50.\nIntraday: everything is closed by 15:15 IST.\nCapital required\
+  \ (per Tradetron): ₹100,000.\nSignals come from runtime variables NIFTY_key1, NIFTY_key2 that are set by an external\
+  \ process (logic not included in the export).\n\nSet 1:\n  Entry when runtime variable 'NIFTY_key1' (set outside this\
+  \ strategy) equals 1.\n    -> SELL 1 lot NIFTY 50 PE ATM (current week expiry, NRML)\n  Exit when runtime variable\
+  \ 'NIFTY_key1' (set outside this strategy) equals 2 OR runtime variable 'NIFTY_key2' (set outside this strategy) equals\
+  \ 1.\n\nSet 2:\n  Entry when runtime variable 'NIFTY_key2' (set outside this strategy) equals 1.\n    -> SELL 1 lot\
+  \ NIFTY 50 CE ATM (current week expiry, NRML)\n  Exit when runtime variable 'NIFTY_key2' (set outside this strategy)\
+  \ equals 2 OR runtime variable 'NIFTY_key1' (set outside this strategy) equals 1.\n\nAll sets:\n  Exit everything when\
+  \ the time is at or after 15:15."
+ideal_conditions:
+  trend:
+  - up
+  - down
+  trend_strength:
+  - moderate
+  - strong
+  volatility:
+  - normal
+  - high
+  squeeze: any
+avoid_conditions:
+- Sharp reversals against the position
+- Choppy days that flip the signal repeatedly
+risk_notes: 'Sells naked options in the trend direction: collects premium but a fast reversal causes large losses.'
+underlyings:
+- NIFTY50
+active_days: any
+source:
+  format: tt-strategy/v2
+  original_name: KC Trend ride Nifty 50 option selling intraday
+  sha256: de21b155f70aa633016175d76aa7671624eb3129f2931da4935d97f8c0b1bc37
+  imported: '2026-10-12'

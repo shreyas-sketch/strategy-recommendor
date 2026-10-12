@@ -1,5 +1,5 @@
 # Imported from Tradetron export "Banknifty Supertrend Intraday 5 min delay selling ITM".
-# Ideal conditions, risk level and experience were suggested from the strategy's structure — review them.
+# Ideal conditions were suggested from the strategy's structure — review them.
 id: banknifty_supertrend_intraday_5_min
 name: Banknifty Supertrend Intraday 5 min delay selling ITM
 category: trend

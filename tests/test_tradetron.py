@@ -140,3 +140,25 @@ def test_itm_seller_and_moneyness_labels():
     buyer = draft("bnf_supertrend")["draft"]["logic"]
     assert "CE ATM+2 strike (spot-based) = 2 strikes out of the money" in buyer
     assert "PE ATM-2 strike (spot-based) = 2 strikes out of the money" in buyer
+
+
+def test_nifty_supertrend_points_strike_and_premium_stop_loss():
+    d = draft("nifty_supertrend_5m_sell_sl")["draft"]
+    Strategy(**d)
+    assert d["underlyings"] == ["NIFTY50"] and d["category"] == "trend" and d["active_days"] == "any"
+    logic = d["logic"]
+    assert "SELL 1 lot NIFTY 50 PE, strike = NIFTY 50 spot rounded to the nearest 100 + 200 (about 200 points in the money)" in logic
+    assert "CE, strike = NIFTY 50 spot rounded to the nearest 100 - 200 (about 200 points in the money)" in logic
+    assert "is above the entry price of traded leg 1 of set 1 + 38" in logic
+    assert "premium rises 38 points above the entry price" in logic
+    assert "on the candle before that is below Supertrend(10, 3)" in logic
+    assert "+()" not in logic and "()" not in logic
+
+
+def test_nifty_3m_supertrend_and_kc_nifty_pair():
+    d = draft("nifty_3m_st")["draft"]
+    assert "3m candles" in d["logic"] and "closed by 15:14" in d["logic"] and "Stop-loss" not in d["logic"]
+    buy, sell = draft("kc_nifty_buying"), draft("kc_nifty_selling")
+    assert buy["draft"]["underlyings"] == sell["draft"]["underlyings"] == ["NIFTY50"]
+    assert "BUY 1 lot NIFTY 50 CE ATM" in buy["draft"]["logic"] and "SELL 1 lot NIFTY 50 PE ATM" in sell["draft"]["logic"]
+    assert any("NIFTY_key1" in w for w in buy["warnings"])

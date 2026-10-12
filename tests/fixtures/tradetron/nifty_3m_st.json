@@ -1,0 +1,248 @@
+{
+  "_format": "tt-strategy/v2",
+  "_readme": {
+    "about": "Tradetron strategy export. Edit and re-import via the ASB Import button.",
+    "logic": "To change a condition's logic, edit its \"conditionJson\" (the AST). The \"conditionValue\"/\"conditionDisplay\" text is regenerated from it on import.",
+    "legs": "For a leg field that has a \"*Json\" (e.g. \"strikeJson\"), edit the JSON — its text form is regenerated on import. Fields with no \"*Json\" (e.g. \"qty\") are plain text: edit them directly.",
+    "structure": "Add/remove/duplicate legs, conditions or sets by editing the arrays.",
+    "do_not": "Do not add \"*_id\" foreign keys back. Lists referenced by id must be ones you own."
+  },
+  "name": "Nifty 3 min st intraday",
+  "description": null,
+  "tags": [
+    {
+      "label": "EarnTheta",
+      "value": 10
+    },
+    {
+      "label": "ShortVol",
+      "value": 13
+    },
+    {
+      "label": "Directional",
+      "value": 26
+    }
+  ],
+  "variables": [],
+  "sets": [
+    {
+      "list": 0,
+      "name": null,
+      "conditions": [
+        {
+          "type": "Entry",
+          "conditionValue": "( tt_get_element ( tt_CLOSE ( tt_get_data ( tt_get_instrument ( 'NFO,NIFTY 50,,,,,' ) , '3m', 'All' )  ) , '-1' ) > tt_get_element ( tt_SUPERTREND ( tt_get_data ( tt_get_instrument ( 'NFO,NIFTY 50,,,,,' ) , '3m', 'All' ) , '10', '3' ) , '-1' )  )  and ( tt_Time ( 'NSE' ) > tt_Number ( '0918' )  )",
+          "conditionJson": "{\"operator\":\"and\",\"operands\":[{\"type\":\"rule\",\"value\":\"builder-basic_rule_0\",\"elements\":[{\"name\":\"Position\",\"kid\":4262,\"params\":[{\"type\":\"keyword\",\"keyword\":{\"name\":\"CLOSE\",\"kid\":7146,\"params\":[{\"type\":\"keyword\",\"keyword\":{\"name\":\"Symbol\",\"kid\":4332,\"params\":[{\"type\":\"keyword\",\"keyword\":{\"name\":\"Instrument Name\",\"kid\":2474,\"params\":[{\"type\":\"value\",\"value\":\"NFO,NIFTY 50,,,,,\"}]}},{\"type\":\"value\",\"value\":\"3m\"},{\"type\":\"value\",\"value\":\"All\"}]}}]}},{\"type\":\"value\",\"value\":\"-1\"}]},{\"name\":\">\",\"params\":[]},{\"name\":\"Position\",\"kid\":1066,\"params\":[{\"type\":\"keyword\",\"keyword\":{\"name\":\"SUPERTREND\",\"kid\":1061,\"params\":[{\"type\":\"keyword\",\"keyword\":{\"name\":\"Symbol\",\"kid\":6427,\"params\":[{\"type\":\"keyword\",\"keyword\":{\"name\":\"Instrument Name\",\"kid\":6607,\"params\":[{\"type\":\"value\",\"value\":\"NFO,NIFTY 50,,,,,\"}]}},{\"type\":\"value\",\"value\":\"3m\"},{\"type\":\"value\",\"value\":\"All\"}]}},{\"type\":\"value\",\"value\":\"10\"},{\"type\":\"value\",\"value\":\"3\"}]}},{\"type\":\"value\",\"value\":\"-1\"}]}]},{\"type\":\"rule\",\"value\":\"builder-basic_rule_1\",\"elements\":[{\"name\":\"Time\",\"kid\":5059,\"params\":[{\"type\":\"value\",\"value\":\"NSE\"}]},{\"name\":\">\",\"params\":[]},{\"name\":\"Number\",\"kid\":2892,\"params\":[{\"type\":\"value\",\"value\":\"0918\"}]}]}]}",
+          "conditionDisplay": "( Position ( CLOSE ( Symbol ( Instrument Name ( 'NFO,NIFTY 50,,,,,' ) , '3m', 'All' )  ) , '-1' ) > Position ( SUPERTREND ( Symbol ( Instrument Name ( 'NFO,NIFTY 50,,,,,' ) , '3m', 'All' ) , '10', '3' ) , '-1' )  )  and ( Time ( 'NSE' ) > Number ( '0918' )  )",
+          "subType": "None",
+          "visible": 1,
+          "legs": [
+            {
+              "instrument": 1855,
+              "list": 0,
+              "optionType": "PE",
+              "expiry": "tt_curr_weekexpiry('NIFTY 50')",
+              "expiryType": "Current Week",
+              "expiryJson": null,
+              "expiryDisplay": null,
+              "strikeType": "Fx",
+              "strike": "( tt_round ( tt_get_var ( tt_get_instrument ( 'NFO,NIFTY 50,,,,,' ) , 'LTP' ) , '100' ) + tt_Number ( '200' )  )",
+              "strikeJson": "{\"operator\":\"and\",\"operands\":[{\"type\":\"rule\",\"value\":\"builder-basic_rule_0\",\"elements\":[{\"name\":\"Round\",\"kid\":2902,\"params\":[{\"type\":\"keyword\",\"keyword\":{\"name\":\"LTP\",\"kid\":4469,\"params\":[{\"type\":\"keyword\",\"keyword\":{\"name\":\"Instrument Name\",\"kid\":7915,\"params\":[{\"type\":\"value\",\"value\":\"NFO,NIFTY 50,,,,,\"}]}}]}},{\"type\":\"value\",\"value\":\"100\"}]},{\"name\":\"+\",\"params\":[]},{\"name\":\"Number\",\"kid\":1546,\"params\":[{\"type\":\"value\",\"value\":\"200\"}]}]}]}",
+              "strikeDisplay": "( Round ( LTP ( Instrument Name ( 'NFO,NIFTY 50,,,,,' ) , 'LTP' ) , '100' ) + Number ( '200' )  )",
+              "qty": "tt_lots(1,'INSTRUMENT','PE')",
+              "qtyType": "Lots",
+              "qtyDisplay": "1",
+              "qtyJson": null,
+              "qtyExprDisplay": null,
+              "buySell": "S",
+              "totalValue": null,
+              "limitPrice": null,
+              "limitPriceJson": null,
+              "limitPriceDisplay": null,
+              "limitPriceExprDisplay": null,
+              "entryTrigger": null,
+              "entryLimit": null,
+              "sLTrigger": null,
+              "sLTriggerJson": null,
+              "sLTriggerDisplay": null,
+              "sLTriggerExprDisplay": null,
+              "sLLimit": null,
+              "targetTrigger": null,
+              "targetLimit": null,
+              "isOvernightProtectionLeg": "No",
+              "productType": "MIS",
+              "underlyingSymbol": "NIFTY 50",
+              "tmp": 0,
+              "updatedAt": "2025-05-29T12:22:14.654000Z",
+              "createdAt": "2025-05-02T08:49:50.588000Z"
+            }
+          ],
+          "extra": {
+            "name": null,
+            "variables": []
+          }
+        },
+        {
+          "type": "Exit",
+          "conditionValue": "( tt_get_element ( tt_CLOSE ( tt_get_data ( tt_get_instrument ( 'NFO,NIFTY 50,,,,,' ) , '3m', 'All' )  ) , '-1' ) < tt_get_element ( tt_SUPERTREND ( tt_get_data ( tt_get_instrument ( 'NFO,NIFTY 50,,,,,' ) , '3m', 'All' ) , '10', '3' ) , '-1' )  )",
+          "conditionJson": "{\"operator\":\"and\",\"operands\":[{\"type\":\"rule\",\"value\":\"builder-basic_rule_0\",\"elements\":[{\"name\":\"Position\",\"kid\":4262,\"params\":[{\"type\":\"keyword\",\"keyword\":{\"name\":\"CLOSE\",\"kid\":7146,\"params\":[{\"type\":\"keyword\",\"keyword\":{\"name\":\"Symbol\",\"kid\":4332,\"params\":[{\"type\":\"keyword\",\"keyword\":{\"name\":\"Instrument Name\",\"kid\":2474,\"params\":[{\"type\":\"value\",\"value\":\"NFO,NIFTY 50,,,,,\"}]}},{\"type\":\"value\",\"value\":\"3m\"},{\"type\":\"value\",\"value\":\"All\"}]}}]}},{\"type\":\"value\",\"value\":\"-1\"}]},{\"name\":\"<\",\"params\":[]},{\"name\":\"Position\",\"kid\":1066,\"params\":[{\"type\":\"keyword\",\"keyword\":{\"name\":\"SUPERTREND\",\"kid\":1061,\"params\":[{\"type\":\"keyword\",\"keyword\":{\"name\":\"Symbol\",\"kid\":6427,\"params\":[{\"type\":\"keyword\",\"keyword\":{\"name\":\"Instrument Name\",\"kid\":6607,\"params\":[{\"type\":\"value\",\"value\":\"NFO,NIFTY 50,,,,,\"}]}},{\"type\":\"value\",\"value\":\"3m\"},{\"type\":\"value\",\"value\":\"All\"}]}},{\"type\":\"value\",\"value\":\"10\"},{\"type\":\"value\",\"value\":\"3\"}]}},{\"type\":\"value\",\"value\":\"-1\"}]}]}]}",
+          "conditionDisplay": "( Position ( CLOSE ( Symbol ( Instrument Name ( 'NFO,NIFTY 50,,,,,' ) , '3m', 'All' )  ) , '-1' ) < Position ( SUPERTREND ( Symbol ( Instrument Name ( 'NFO,NIFTY 50,,,,,' ) , '3m', 'All' ) , '10', '3' ) , '-1' )  )",
+          "subType": "None",
+          "visible": 1,
+          "legs": [],
+          "extra": {
+            "name": null,
+            "variables": []
+          }
+        }
+      ]
+    },
+    {
+      "list": 0,
+      "name": null,
+      "conditions": [
+        {
+          "type": "Entry",
+          "conditionValue": "( tt_get_element ( tt_CLOSE ( tt_get_data ( tt_get_instrument ( 'NFO,NIFTY 50,,,,,' ) , '3m', 'All' )  ) , '-1' ) < tt_get_element ( tt_SUPERTREND ( tt_get_data ( tt_get_instrument ( 'NFO,NIFTY 50,,,,,' ) , '3m', 'All' ) , '10', '3' ) , '-1' )  )  and ( tt_Time ( 'NSE' ) > tt_Number ( '0918' )  )",
+          "conditionJson": "{\"operator\":\"and\",\"operands\":[{\"type\":\"rule\",\"value\":\"builder-basic_rule_0\",\"elements\":[{\"name\":\"Position\",\"kid\":4262,\"params\":[{\"type\":\"keyword\",\"keyword\":{\"name\":\"CLOSE\",\"kid\":7146,\"params\":[{\"type\":\"keyword\",\"keyword\":{\"name\":\"Symbol\",\"kid\":4332,\"params\":[{\"type\":\"keyword\",\"keyword\":{\"name\":\"Instrument Name\",\"kid\":2474,\"params\":[{\"type\":\"value\",\"value\":\"NFO,NIFTY 50,,,,,\"}]}},{\"type\":\"value\",\"value\":\"3m\"},{\"type\":\"value\",\"value\":\"All\"}]}}]}},{\"type\":\"value\",\"value\":\"-1\"}]},{\"name\":\"<\",\"params\":[]},{\"name\":\"Position\",\"kid\":1066,\"params\":[{\"type\":\"keyword\",\"keyword\":{\"name\":\"SUPERTREND\",\"kid\":1061,\"params\":[{\"type\":\"keyword\",\"keyword\":{\"name\":\"Symbol\",\"kid\":6427,\"params\":[{\"type\":\"keyword\",\"keyword\":{\"name\":\"Instrument Name\",\"kid\":6607,\"params\":[{\"type\":\"value\",\"value\":\"NFO,NIFTY 50,,,,,\"}]}},{\"type\":\"value\",\"value\":\"3m\"},{\"type\":\"value\",\"value\":\"All\"}]}},{\"type\":\"value\",\"value\":\"10\"},{\"type\":\"value\",\"value\":\"3\"}]}},{\"type\":\"value\",\"value\":\"-1\"}]}]},{\"type\":\"rule\",\"value\":\"builder-basic_rule_1\",\"elements\":[{\"name\":\"Time\",\"kid\":2877,\"params\":[{\"type\":\"value\",\"value\":\"NSE\"}]},{\"name\":\">\",\"params\":[]},{\"name\":\"Number\",\"kid\":6971,\"params\":[{\"type\":\"value\",\"value\":\"0918\"}]}]}]}",
+          "conditionDisplay": "( Position ( CLOSE ( Symbol ( Instrument Name ( 'NFO,NIFTY 50,,,,,' ) , '3m', 'All' )  ) , '-1' ) < Position ( SUPERTREND ( Symbol ( Instrument Name ( 'NFO,NIFTY 50,,,,,' ) , '3m', 'All' ) , '10', '3' ) , '-1' )  )  and ( Time ( 'NSE' ) > Number ( '0918' )  )",
+          "subType": "None",
+          "visible": 1,
+          "legs": [
+            {
+              "instrument": 1855,
+              "list": 0,
+              "optionType": "CE",
+              "expiry": "tt_curr_weekexpiry('NIFTY 50')",
+              "expiryType": "Current Week",
+              "expiryJson": null,
+              "expiryDisplay": null,
+              "strikeType": "Fx",
+              "strike": "( tt_round ( tt_get_var ( tt_get_instrument ( 'NFO,NIFTY 50,,,,,' ) , 'LTP' ) , '100' ) - tt_Number ( '200' )  )",
+              "strikeJson": "{\"operator\":\"and\",\"operands\":[{\"type\":\"rule\",\"value\":\"builder-basic_rule_0\",\"elements\":[{\"name\":\"Round\",\"kid\":1579,\"params\":[{\"type\":\"keyword\",\"keyword\":{\"name\":\"LTP\",\"kid\":7678,\"params\":[{\"type\":\"keyword\",\"keyword\":{\"name\":\"Instrument Name\",\"kid\":8689,\"params\":[{\"type\":\"value\",\"value\":\"NFO,NIFTY 50,,,,,\"}]}}]}},{\"type\":\"value\",\"value\":\"100\"}]},{\"name\":\"-\",\"params\":[]},{\"name\":\"Number\",\"kid\":5584,\"params\":[{\"type\":\"value\",\"value\":\"200\"}]}]}]}",
+              "strikeDisplay": "( Round ( LTP ( Instrument Name ( 'NFO,NIFTY 50,,,,,' ) , 'LTP' ) , '100' ) - Number ( '200' )  )",
+              "qty": "tt_lots(1,'INSTRUMENT','CE')",
+              "qtyType": "Lots",
+              "qtyDisplay": "1",
+              "qtyJson": null,
+              "qtyExprDisplay": null,
+              "buySell": "S",
+              "totalValue": null,
+              "limitPrice": null,
+              "limitPriceJson": null,
+              "limitPriceDisplay": null,
+              "limitPriceExprDisplay": null,
+              "entryTrigger": null,
+              "entryLimit": null,
+              "sLTrigger": null,
+              "sLTriggerJson": null,
+              "sLTriggerDisplay": null,
+              "sLTriggerExprDisplay": null,
+              "sLLimit": null,
+              "targetTrigger": null,
+              "targetLimit": null,
+              "isOvernightProtectionLeg": "No",
+              "productType": "MIS",
+              "underlyingSymbol": "NIFTY 50",
+              "tmp": 0,
+              "updatedAt": "2025-05-29T12:22:14.673000Z",
+              "createdAt": "2025-05-02T08:49:50.606000Z"
+            }
+          ],
+          "extra": {
+            "name": null,
+            "variables": []
+          }
+        },
+        {
+          "type": "Exit",
+          "conditionValue": "( tt_get_element ( tt_CLOSE ( tt_get_data ( tt_get_instrument ( 'NFO,NIFTY 50,,,,,' ) , '3m', 'All' )  ) , '-1' ) > tt_get_element ( tt_SUPERTREND ( tt_get_data ( tt_get_instrument ( 'NFO,NIFTY 50,,,,,' ) , '3m', 'All' ) , '10', '3' ) , '-1' )  )",
+          "conditionJson": "{\"operator\":\"and\",\"operands\":[{\"type\":\"rule\",\"value\":\"builder-basic_rule_0\",\"elements\":[{\"name\":\"Position\",\"kid\":4262,\"params\":[{\"type\":\"keyword\",\"keyword\":{\"name\":\"CLOSE\",\"kid\":7146,\"params\":[{\"type\":\"keyword\",\"keyword\":{\"name\":\"Symbol\",\"kid\":4332,\"params\":[{\"type\":\"keyword\",\"keyword\":{\"name\":\"Instrument Name\",\"kid\":2474,\"params\":[{\"type\":\"value\",\"value\":\"NFO,NIFTY 50,,,,,\"}]}},{\"type\":\"value\",\"value\":\"3m\"},{\"type\":\"value\",\"value\":\"All\"}]}}]}},{\"type\":\"value\",\"value\":\"-1\"}]},{\"name\":\">\",\"params\":[]},{\"name\":\"Position\",\"kid\":1066,\"params\":[{\"type\":\"keyword\",\"keyword\":{\"name\":\"SUPERTREND\",\"kid\":1061,\"params\":[{\"type\":\"keyword\",\"keyword\":{\"name\":\"Symbol\",\"kid\":6427,\"params\":[{\"type\":\"keyword\",\"keyword\":{\"name\":\"Instrument Name\",\"kid\":6607,\"params\":[{\"type\":\"value\",\"value\":\"NFO,NIFTY 50,,,,,\"}]}},{\"type\":\"value\",\"value\":\"3m\"},{\"type\":\"value\",\"value\":\"All\"}]}},{\"type\":\"value\",\"value\":\"10\"},{\"type\":\"value\",\"value\":\"3\"}]}},{\"type\":\"value\",\"value\":\"-1\"}]}]}]}",
+          "conditionDisplay": "( Position ( CLOSE ( Symbol ( Instrument Name ( 'NFO,NIFTY 50,,,,,' ) , '3m', 'All' )  ) , '-1' ) > Position ( SUPERTREND ( Symbol ( Instrument Name ( 'NFO,NIFTY 50,,,,,' ) , '3m', 'All' ) , '10', '3' ) , '-1' )  )",
+          "subType": "None",
+          "visible": 1,
+          "legs": [],
+          "extra": {
+            "name": null,
+            "variables": []
+          }
+        }
+      ]
+    },
+    {
+      "name": null,
+      "conditions": [
+        {
+          "type": "Repair Once",
+          "conditionValue": null,
+          "conditionJson": null,
+          "conditionDisplay": null,
+          "subType": "Overnight Protection",
+          "visible": 0,
+          "legs": [],
+          "extra": {
+            "name": null,
+            "variables": []
+          }
+        },
+        {
+          "type": "Universal Exit",
+          "conditionValue": "( tt_Time ( 'NSE' ) >= tt_Number ( '1514' )  )",
+          "conditionJson": "{\"operator\":\"and\",\"operands\":[{\"type\":\"rule\",\"value\":\"builder-basic_rule_0\",\"elements\":[{\"name\":\"Time\",\"kid\":1583,\"params\":[{\"type\":\"value\",\"value\":\"NSE\"}]},{\"name\":\">=\",\"params\":[]},{\"name\":\"Number\",\"kid\":8054,\"params\":[{\"type\":\"value\",\"value\":\"1514\"}]}]}]}",
+          "conditionDisplay": "( Time ( 'NSE' ) >= Number ( '1514' )  )",
+          "subType": "None",
+          "visible": 1,
+          "legs": [],
+          "extra": {
+            "name": null,
+            "variables": []
+          }
+        }
+      ]
+    }
+  ],
+  "currency": "INR",
+  "priceExecution": "LTP",
+  "tranchSize": 100,
+  "tslToCostAtProfit": 0,
+  "tslProfitIncrease": 0,
+  "tslSlIncrease": 0,
+  "runFrequency": "Continuous",
+  "firstTradeAfterOpen": 1,
+  "lastTradeBeforeClose": 60,
+  "rolloverExpiryPeriod": "Next Week",
+  "capitalRequired": 225000,
+  "priceRevisionAttempts": 5,
+  "tranchWaitSecs": 1,
+  "exitShortsFirst": 0,
+  "priceRevisionTimeout": 1,
+  "reactivateEvery": 720,
+  "finalAction": "MARKET",
+  "exitAtMarket": 0,
+  "runEvery": 1,
+  "rolloverExpiryTime": "30",
+  "priceTicksMultiple": "7",
+  "pythonCode": null,
+  "isPublic": 0,
+  "minMultiple": 1,
+  "maxMultiple": 100,
+  "freePeriod": 1,
+  "fixedFee": "0.00",
+  "fixedFeePeriod": "1",
+  "variableFee": "0.00",
+  "hurdleRate": 0,
+  "recreatePositionsInNewFollowers": "No",
+  "allowDuplication": 0,
+  "confirmationPerSubscriber": 0,
+  "hideSubscribers": "No",
+  "strategyPublicLinkAccess": "Yes",
+  "strategyPublicLink": null,
+  "displayPositionsToNonSubscribers": 0,
+  "highWatermark": "Yes",
+  "showLiveAutoDeployment": 0,
+  "feeShare": null,
+  "isApproved": 0,
+  "feeFrequency": "Month",
+  "backtestLinkSubscribers": null,
+  "backtestLinkNonsubscribers": null
+}

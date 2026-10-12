@@ -8,7 +8,9 @@ from app.config import Settings
 
 ROOT = Path(__file__).resolve().parent.parent
 SHIPPED = {"bnf_15_min_super_trend_intraday_instant", "atm_roll_aggressive_diversified_kapoor",
-           "kc_trend_ride_nifty_bank_option_selling", "banknifty_supertrend_intraday_5_min"}
+           "kc_trend_ride_nifty_bank_option_selling", "banknifty_supertrend_intraday_5_min",
+           "kc_trend_ride_nifty_50_option_buying", "kc_trend_ride_nifty_50_option_selling",
+           "nifty_supertrend_intraday_5_min_selling", "nifty_3_min_st_intraday"}
 
 
 def cfg(tmp_path):

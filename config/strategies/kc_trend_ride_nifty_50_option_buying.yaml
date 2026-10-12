@@ -1,0 +1,46 @@
+# Imported from Tradetron export "KC Trend ride Nifty 50 option buying intraday".
+# Ideal conditions were suggested from the strategy's structure — review them.
+# ACTION NEEDED: entries come from runtime variables NIFTY_key1 / NIFTY_key2 set outside this
+# export. Add what sets them (e.g. the Keltner Channel rule) to `logic` so the recommender can judge it.
+id: kc_trend_ride_nifty_50_option_buying
+name: KC Trend ride Nifty 50 option buying intraday
+category: trend
+instruments:
+- options
+horizons:
+- 1d
+- 1w
+description: 'Directional ATM option buying on NIFTY 50 (intraday): buys an ATM call or put when the external Keltner
+  Channel trend signal fires; exits on the opposite signal or at 15:15.'
+logic: "Style: Directional option buying (trend following) on NIFTY 50.\nIntraday: everything is closed by 15:15 IST.\n\
+  Capital required (per Tradetron): ₹100,000.\nSignals come from runtime variables NIFTY_key1, NIFTY_key2 that are set\
+  \ by an external process (logic not included in the export).\n\nSet 1:\n  Entry when runtime variable 'NIFTY_key1'\
+  \ (set outside this strategy) equals 1.\n    -> BUY 1 lot NIFTY 50 CE ATM (current week expiry, NRML)\n  Exit when\
+  \ runtime variable 'NIFTY_key1' (set outside this strategy) equals 2 OR runtime variable 'NIFTY_key2' (set outside\
+  \ this strategy) equals 1.\n\nSet 2:\n  Entry when runtime variable 'NIFTY_key2' (set outside this strategy) equals\
+  \ 1.\n    -> BUY 1 lot NIFTY 50 PE ATM (current week expiry, NRML)\n  Exit when runtime variable 'NIFTY_key2' (set\
+  \ outside this strategy) equals 2 OR runtime variable 'NIFTY_key1' (set outside this strategy) equals 1.\n\nAll sets:\n\
+  \  Exit everything when the time is at or after 15:15."
+ideal_conditions:
+  trend:
+  - up
+  - down
+  trend_strength:
+  - moderate
+  - strong
+  volatility:
+  - normal
+  - high
+  squeeze: any
+avoid_conditions:
+- Sideways, choppy sessions — repeated whipsaws and premium decay
+- Very low volatility — option premiums barely move
+risk_notes: Bought options lose value through time decay; whipsaws in a range cause a string of small losses.
+underlyings:
+- NIFTY50
+active_days: any
+source:
+  format: tt-strategy/v2
+  original_name: KC Trend ride Nifty 50 option buying intraday
+  sha256: 147795dbe4dd2ed3cfab94e138cb85687ecaed5a7cb3b8d48769aaaf07924b2f
+  imported: '2026-10-12'

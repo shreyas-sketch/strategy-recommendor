@@ -1,0 +1,57 @@
+# Imported from Tradetron export "Nifty Supertrend Intraday 5 min selling 2.5K Per trade SL".
+# Ideal conditions were suggested from the strategy's structure — review them.
+id: nifty_supertrend_intraday_5_min_selling
+name: Nifty Supertrend Intraday 5 min selling 2.5K Per trade SL
+category: trend
+instruments:
+- options
+horizons:
+- 1d
+- 1w
+description: 'Directional in-the-money option selling on NIFTY 50 (intraday): 5-min Supertrend(10,3) — sells a ~200-point
+  ITM put in uptrends and ITM call in downtrends, with a 38-point premium stop-loss (about ₹2.5K per lot).'
+logic: "Style: Directional option selling on NIFTY 50.\nIntraday: everything is closed by 15:15 IST.\nIndicators used:\
+  \ Supertrend.\nCapital required (per Tradetron): ₹225,000.\nStop-loss: a short option is closed when its premium rises\
+  \ 38 points above the entry price (per unit; × lot size per lot).\nTradetron tags: EarnTheta, ShortVol, Directional.\n\
+  \nSet 1:\n  Entry when (close of NIFTY 50 (spot/index) 5m candles on the last completed candle is above Supertrend(10,\
+  \ 3) of NIFTY 50 (spot/index) 5m candles on the last completed candle AND the time equals 09:20) OR (close of NIFTY\
+  \ 50 (spot/index) 5m candles on the last completed candle is above Supertrend(10, 3) of NIFTY 50 (spot/index) 5m candles\
+  \ on the last completed candle AND close of NIFTY 50 (spot/index) 5m candles on the candle before that is below Supertrend(10,\
+  \ 3) of NIFTY 50 (spot/index) 5m candles on the candle before that AND the time is at or after 09:25).\n    -> SELL\
+  \ 1 lot NIFTY 50 PE, strike = NIFTY 50 spot rounded to the nearest 100 + 200 (about 200 points in the money) (current\
+  \ week expiry, NRML)\n  Exit when the live price (LTP) of the traded leg 1 of set 1 is above the entry price of traded\
+  \ leg 1 of set 1 + 38 OR (close of NIFTY 50 (spot/index) 5m candles on the last completed candle is below Supertrend(10,\
+  \ 3) of NIFTY 50 (spot/index) 5m candles on the last completed candle AND the time is at or after 09:20).\n\nSet 2:\n\
+  \  Entry when (close of NIFTY 50 (spot/index) 5m candles on the last completed candle is below Supertrend(10, 3) of\
+  \ NIFTY 50 (spot/index) 5m candles on the last completed candle AND the time equals 09:20) OR (close of NIFTY 50 (spot/index)\
+  \ 5m candles on the last completed candle is below Supertrend(10, 3) of NIFTY 50 (spot/index) 5m candles on the last\
+  \ completed candle AND close of NIFTY 50 (spot/index) 5m candles on the candle before that is above Supertrend(10,\
+  \ 3) of NIFTY 50 (spot/index) 5m candles on the candle before that AND the time is at or after 09:25).\n    -> SELL\
+  \ 1 lot NIFTY 50 CE, strike = NIFTY 50 spot rounded to the nearest 100 - 200 (about 200 points in the money) (current\
+  \ week expiry, NRML)\n  Exit when the live price (LTP) of the traded leg 1 of set 2 is above the entry price of traded\
+  \ leg 1 of set 2 + 38 OR (close of NIFTY 50 (spot/index) 5m candles on the last completed candle is above Supertrend(10,\
+  \ 3) of NIFTY 50 (spot/index) 5m candles on the last completed candle AND the time is at or after 09:20).\n\nAll sets:\n\
+  \  Exit everything when the time is at or after 15:15."
+ideal_conditions:
+  trend:
+  - up
+  - down
+  trend_strength:
+  - moderate
+  - strong
+  volatility:
+  - normal
+  - high
+  squeeze: any
+avoid_conditions:
+- Sharp reversals against the position
+- Choppy days that flip the signal repeatedly
+risk_notes: 'Sells naked options in the trend direction: collects premium but a fast reversal causes large losses.'
+underlyings:
+- NIFTY50
+active_days: any
+source:
+  format: tt-strategy/v2
+  original_name: Nifty Supertrend Intraday 5 min selling 2.5K Per trade SL
+  sha256: e344bacab39c1982cba170847be09ca9401ae90db4967b5441a44e04560c9559
+  imported: '2026-10-12'

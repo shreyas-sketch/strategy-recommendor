@@ -1,0 +1,231 @@
+{
+  "_format": "tt-strategy/v2",
+  "_readme": {
+    "about": "Tradetron strategy export. Edit and re-import via the ASB Import button.",
+    "logic": "To change a condition's logic, edit its \"conditionJson\" (the AST). The \"conditionValue\"/\"conditionDisplay\" text is regenerated from it on import.",
+    "legs": "For a leg field that has a \"*Json\" (e.g. \"strikeJson\"), edit the JSON — its text form is regenerated on import. Fields with no \"*Json\" (e.g. \"qty\") are plain text: edit them directly.",
+    "structure": "Add/remove/duplicate legs, conditions or sets by editing the arrays.",
+    "do_not": "Do not add \"*_id\" foreign keys back. Lists referenced by id must be ones you own."
+  },
+  "name": "KC Trend ride Nifty 50 option selling intraday",
+  "description": null,
+  "tags": [],
+  "variables": [],
+  "sets": [
+    {
+      "list": 0,
+      "name": null,
+      "conditions": [
+        {
+          "type": "Entry",
+          "conditionValue": "( get_runtime ( 'strategy_id', 'run_counter', 'NIFTY_key1' ) == tt_Number ( '1' )  )",
+          "conditionJson": "{\"operator\":\"and\",\"operands\":[{\"type\":\"rule\",\"value\":\"builder-basic_rule_0\",\"elements\":[{\"name\":\"Get Runtime\",\"kid\":2501,\"params\":[{\"type\":\"value\",\"value\":\"NIFTY_key1\"}]},{\"name\":\"==\",\"params\":[]},{\"name\":\"Number\",\"kid\":2634,\"params\":[{\"type\":\"value\",\"value\":\"1\"}]}]}]}",
+          "conditionDisplay": "( Get Runtime ( 'strategy_id', 'run_counter', 'NIFTY_key1' ) == Number ( '1' )  )",
+          "subType": "None",
+          "visible": 1,
+          "legs": [
+            {
+              "instrument": 1855,
+              "list": 0,
+              "optionType": "PE",
+              "expiryType": "Current Week",
+              "expiry": "tt_curr_weekexpiry('NIFTY 50')",
+              "expiryJson": null,
+              "expiryDisplay": null,
+              "strikeType": "ATM",
+              "strike": "tt_ATM('NIFTY 50')",
+              "strikeJson": null,
+              "strikeDisplay": null,
+              "qty": "tt_lots(1,'INSTRUMENT','PE')",
+              "qtyType": "Lots",
+              "qtyDisplay": "1",
+              "qtyJson": null,
+              "qtyExprDisplay": null,
+              "limitPrice": null,
+              "limitPriceDisplay": null,
+              "limitPriceJson": null,
+              "limitPriceExprDisplay": null,
+              "buySell": "S",
+              "entryLimit": null,
+              "entryTrigger": null,
+              "sLLimit": null,
+              "sLTrigger": null,
+              "sLTriggerDisplay": null,
+              "sLTriggerJson": null,
+              "sLTriggerExprDisplay": null,
+              "targetLimit": null,
+              "targetTrigger": null,
+              "productType": "NRML",
+              "underlyingSymbol": "NIFTY 50",
+              "isOvernightProtectionLeg": "No",
+              "updatedAt": "2026-06-18T00:26:38.159000Z",
+              "createdAt": "2026-06-18T00:24:40.553000Z"
+            }
+          ],
+          "extra": {
+            "name": null,
+            "variables": []
+          }
+        },
+        {
+          "type": "Exit",
+          "conditionValue": "( get_runtime ( 'strategy_id', 'run_counter', 'NIFTY_key1' ) == tt_Number ( '2' )  )  or ( get_runtime ( 'strategy_id', 'run_counter', 'NIFTY_key2' ) == tt_Number ( '1' )  )",
+          "conditionJson": "{\"operator\":\"or\",\"operands\":[{\"type\":\"rule\",\"value\":\"builder-basic_rule_0\",\"elements\":[{\"name\":\"Get Runtime\",\"kid\":2501,\"params\":[{\"type\":\"value\",\"value\":\"NIFTY_key1\"}]},{\"name\":\"==\",\"params\":[]},{\"name\":\"Number\",\"kid\":2634,\"params\":[{\"type\":\"value\",\"value\":\"2\"}]}]},{\"type\":\"rule\",\"value\":\"builder-basic_rule_1\",\"elements\":[{\"name\":\"Get Runtime\",\"kid\":2501,\"params\":[{\"type\":\"value\",\"value\":\"NIFTY_key2\"}]},{\"name\":\"==\",\"params\":[]},{\"name\":\"Number\",\"kid\":2634,\"params\":[{\"type\":\"value\",\"value\":\"1\"}]}]}]}",
+          "conditionDisplay": "( Get Runtime ( 'strategy_id', 'run_counter', 'NIFTY_key1' ) == Number ( '2' )  )  or ( Get Runtime ( 'strategy_id', 'run_counter', 'NIFTY_key2' ) == Number ( '1' )  )",
+          "subType": "None",
+          "visible": 1,
+          "legs": [],
+          "extra": {
+            "name": null,
+            "variables": []
+          }
+        }
+      ]
+    },
+    {
+      "list": 0,
+      "name": null,
+      "conditions": [
+        {
+          "type": "Entry",
+          "conditionValue": "( get_runtime ( 'strategy_id', 'run_counter', 'NIFTY_key2' ) == tt_Number ( '1' )  )",
+          "conditionJson": "{\"operator\":\"and\",\"operands\":[{\"type\":\"rule\",\"value\":\"builder-basic_rule_0\",\"elements\":[{\"name\":\"Get Runtime\",\"kid\":2501,\"params\":[{\"type\":\"value\",\"value\":\"NIFTY_key2\"}]},{\"name\":\"==\",\"params\":[]},{\"name\":\"Number\",\"kid\":2634,\"params\":[{\"type\":\"value\",\"value\":\"1\"}]}]}]}",
+          "conditionDisplay": "( Get Runtime ( 'strategy_id', 'run_counter', 'NIFTY_key2' ) == Number ( '1' )  )",
+          "subType": "None",
+          "visible": 1,
+          "legs": [
+            {
+              "instrument": 1855,
+              "list": 0,
+              "optionType": "CE",
+              "expiryType": "Current Week",
+              "expiry": "tt_curr_weekexpiry('NIFTY 50')",
+              "expiryJson": null,
+              "expiryDisplay": null,
+              "strikeType": "ATM",
+              "strike": "tt_ATM('NIFTY 50')",
+              "strikeJson": null,
+              "strikeDisplay": null,
+              "qty": "tt_lots(1,'INSTRUMENT','CE')",
+              "qtyType": "Lots",
+              "qtyDisplay": "1",
+              "qtyJson": null,
+              "qtyExprDisplay": null,
+              "limitPrice": null,
+              "limitPriceDisplay": null,
+              "limitPriceJson": null,
+              "limitPriceExprDisplay": null,
+              "buySell": "S",
+              "entryLimit": null,
+              "entryTrigger": null,
+              "sLLimit": null,
+              "sLTrigger": null,
+              "sLTriggerDisplay": null,
+              "sLTriggerJson": null,
+              "sLTriggerExprDisplay": null,
+              "targetLimit": null,
+              "targetTrigger": null,
+              "productType": "NRML",
+              "underlyingSymbol": "NIFTY 50",
+              "isOvernightProtectionLeg": "No",
+              "updatedAt": "2026-06-18T00:26:38.169000Z",
+              "createdAt": "2026-06-18T00:24:40.563000Z"
+            }
+          ],
+          "extra": {
+            "name": null,
+            "variables": []
+          }
+        },
+        {
+          "type": "Exit",
+          "conditionValue": "( get_runtime ( 'strategy_id', 'run_counter', 'NIFTY_key2' ) == tt_Number ( '2' )  )  or ( get_runtime ( 'strategy_id', 'run_counter', 'NIFTY_key1' ) == tt_Number ( '1' )  )",
+          "conditionJson": "{\"operator\":\"or\",\"operands\":[{\"type\":\"rule\",\"value\":\"builder-basic_rule_0\",\"elements\":[{\"name\":\"Get Runtime\",\"kid\":2501,\"params\":[{\"type\":\"value\",\"value\":\"NIFTY_key2\"}]},{\"name\":\"==\",\"params\":[]},{\"name\":\"Number\",\"kid\":2634,\"params\":[{\"type\":\"value\",\"value\":\"2\"}]}]},{\"type\":\"rule\",\"value\":\"builder-basic_rule_1\",\"elements\":[{\"name\":\"Get Runtime\",\"kid\":2501,\"params\":[{\"type\":\"value\",\"value\":\"NIFTY_key1\"}]},{\"name\":\"==\",\"params\":[]},{\"name\":\"Number\",\"kid\":2634,\"params\":[{\"type\":\"value\",\"value\":\"1\"}]}]}]}",
+          "conditionDisplay": "( Get Runtime ( 'strategy_id', 'run_counter', 'NIFTY_key2' ) == Number ( '2' )  )  or ( Get Runtime ( 'strategy_id', 'run_counter', 'NIFTY_key1' ) == Number ( '1' )  )",
+          "subType": "None",
+          "visible": 1,
+          "legs": [],
+          "extra": {
+            "name": null,
+            "variables": []
+          }
+        }
+      ]
+    },
+    {
+      "name": null,
+      "conditions": [
+        {
+          "type": "Repair Once",
+          "conditionValue": null,
+          "conditionJson": null,
+          "conditionDisplay": null,
+          "subType": "Overnight Protection",
+          "visible": 0,
+          "legs": [],
+          "extra": {
+            "name": null,
+            "variables": []
+          }
+        },
+        {
+          "type": "Universal Exit",
+          "conditionValue": "( tt_Time ( 'NSE' ) >= tt_Number ( '1515' )  )",
+          "conditionJson": "{\"operator\":\"and\",\"operands\":[{\"type\":\"rule\",\"value\":\"builder-basic_rule_0\",\"elements\":[{\"name\":\"Time\",\"kid\":7423,\"params\":[{\"type\":\"value\",\"value\":\"NSE\"}]},{\"name\":\">=\",\"params\":[]},{\"name\":\"Number\",\"kid\":5319,\"params\":[{\"type\":\"value\",\"value\":\"1515\"}]}]}]}",
+          "conditionDisplay": "( Time ( 'NSE' ) >= Number ( '1515' )  )",
+          "subType": "None",
+          "visible": 1,
+          "legs": [],
+          "extra": {
+            "name": null,
+            "variables": []
+          }
+        }
+      ]
+    }
+  ],
+  "currency": "INR",
+  "priceExecution": "Market Price",
+  "tranchSize": 100,
+  "tslToCostAtProfit": 0,
+  "tslProfitIncrease": 0,
+  "tslSlIncrease": 0,
+  "runFrequency": "Continuous",
+  "firstTradeAfterOpen": 1,
+  "lastTradeBeforeClose": 60,
+  "rolloverExpiryPeriod": "Dont Rollover",
+  "capitalRequired": 100000,
+  "priceRevisionAttempts": 1,
+  "tranchWaitSecs": 1,
+  "exitShortsFirst": 1,
+  "priceRevisionTimeout": 0,
+  "reactivateEvery": 720,
+  "finalAction": "MARKET",
+  "exitAtMarket": 0,
+  "runEvery": 1,
+  "rolloverExpiryTime": "1500",
+  "priceTicksMultiple": "1",
+  "pythonCode": null,
+  "isPublic": 0,
+  "minMultiple": 1,
+  "maxMultiple": 100,
+  "freePeriod": 1,
+  "fixedFee": "0.00",
+  "fixedFeePeriod": "1",
+  "variableFee": "0.00",
+  "hurdleRate": 0,
+  "recreatePositionsInNewFollowers": "No",
+  "allowDuplication": 0,
+  "confirmationPerSubscriber": 0,
+  "hideSubscribers": "No",
+  "strategyPublicLinkAccess": "Yes",
+  "strategyPublicLink": null,
+  "displayPositionsToNonSubscribers": 0,
+  "highWatermark": "Yes",
+  "showLiveAutoDeployment": 0,
+  "feeShare": null,
+  "isApproved": 0,
+  "feeFrequency": "Month",
+  "backtestLinkSubscribers": null,
+  "backtestLinkNonsubscribers": null
+}

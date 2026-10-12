@@ -1,0 +1,49 @@
+# Imported from Tradetron export "Nifty 3 min st intraday".
+# Ideal conditions were suggested from the strategy's structure — review them.
+id: nifty_3_min_st_intraday
+name: Nifty 3 min st intraday
+category: trend
+instruments:
+- options
+horizons:
+- 1d
+- 1w
+description: 'Directional in-the-money option selling on NIFTY 50 (intraday): 3-min Supertrend(10,3) — sells a ~200-point
+  ITM put in uptrends and ITM call in downtrends; exits only when the Supertrend flips.'
+logic: "Style: Directional option selling on NIFTY 50.\nIntraday: everything is closed by 15:14 IST.\nIndicators used:\
+  \ Supertrend.\nCapital required (per Tradetron): ₹225,000.\nTradetron tags: EarnTheta, ShortVol, Directional.\n\nSet\
+  \ 1:\n  Entry when close of NIFTY 50 (spot/index) 3m candles on the last completed candle is above Supertrend(10, 3)\
+  \ of NIFTY 50 (spot/index) 3m candles on the last completed candle AND the time is after 09:18.\n    -> SELL 1 lot\
+  \ NIFTY 50 PE, strike = NIFTY 50 spot rounded to the nearest 100 + 200 (about 200 points in the money) (current week\
+  \ expiry, intraday (MIS))\n  Exit when close of NIFTY 50 (spot/index) 3m candles on the last completed candle is below\
+  \ Supertrend(10, 3) of NIFTY 50 (spot/index) 3m candles on the last completed candle.\n\nSet 2:\n  Entry when close\
+  \ of NIFTY 50 (spot/index) 3m candles on the last completed candle is below Supertrend(10, 3) of NIFTY 50 (spot/index)\
+  \ 3m candles on the last completed candle AND the time is after 09:18.\n    -> SELL 1 lot NIFTY 50 CE, strike = NIFTY\
+  \ 50 spot rounded to the nearest 100 - 200 (about 200 points in the money) (current week expiry, intraday (MIS))\n\
+  \  Exit when close of NIFTY 50 (spot/index) 3m candles on the last completed candle is above Supertrend(10, 3) of NIFTY\
+  \ 50 (spot/index) 3m candles on the last completed candle.\n\nAll sets:\n  Exit everything when the time is at or after\
+  \ 15:14."
+ideal_conditions:
+  trend:
+  - up
+  - down
+  trend_strength:
+  - moderate
+  - strong
+  volatility:
+  - normal
+  - high
+  squeeze: any
+avoid_conditions:
+- Sharp reversals against the position
+- Choppy days that flip the signal repeatedly
+- Range-bound days — the fast 3-min Supertrend flips often and there is no fixed stop-loss
+risk_notes: 'Sells naked options in the trend direction: collects premium but a fast reversal causes large losses.'
+underlyings:
+- NIFTY50
+active_days: any
+source:
+  format: tt-strategy/v2
+  original_name: Nifty 3 min st intraday
+  sha256: 13545349f96b0c058e95f03737c400d83c8170b880dceede7b62d8442db4b0a0
+  imported: '2026-10-12'

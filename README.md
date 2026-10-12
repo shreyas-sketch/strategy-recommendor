@@ -218,11 +218,21 @@ With Groww keys set, the app fetches each index's F&O expiry dates from Groww's
 
 ### Shipped strategies
 
-Four Tradetron strategies ship with the app:
-* **BNF 15 min Supertrend:** buys out-of-the-money options.
-* **Banknifty Supertrend 5 min:** sells in-the-money options.
-* **ATM Roll:** NIFTY/SENSEX expiry-day straddle selling.
-* **KC Trend ride:** Bank Nifty directional selling.
+Eight Tradetron strategies ship with the app:
+
+| Strategy | Index | What it does |
+|---|---|---|
+| BNF 15 min Supertrend | Bank Nifty | buys out-of-the-money options |
+| Banknifty Supertrend 5 min | Bank Nifty | sells in-the-money options |
+| KC Trend ride (Bank Nifty) | Bank Nifty | directional ATM selling |
+| ATM Roll | NIFTY + SENSEX | expiry-day straddle selling |
+| Nifty Supertrend 5 min selling | NIFTY 50 | sells ~200-pt ITM options, 38-pt premium stop-loss |
+| Nifty 3 min Supertrend | NIFTY 50 | sells ~200-pt ITM options, exits on the flip |
+| KC Trend ride Nifty 50 buying | NIFTY 50 | directional ATM buying |
+| KC Trend ride Nifty 50 selling | NIFTY 50 | directional ATM selling |
+
+The three KC strategies take their signals from runtime variables set outside Tradetron's
+export. Add the Keltner Channel rule to their Logic in the admin panel.
 
 Each shipped file is added to the volume **once**:
 * A fresh deployment gets all of them.

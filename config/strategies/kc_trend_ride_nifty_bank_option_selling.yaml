@@ -1,5 +1,5 @@
 # Imported from Tradetron export "KC Trend ride Nifty Bank option selling intraday".
-# Ideal conditions, risk level and experience were suggested from the strategy's structure — review them.
+# Ideal conditions were suggested from the strategy's structure — review them.
 # ACTION NEEDED: entries come from runtime variables BANKNIFTY_key1 / BANKNIFTY_key2 set outside this
 # export. Add what sets them (e.g. the Keltner Channel rule) to `logic` so the recommender can judge it.
 id: kc_trend_ride_nifty_bank_option_selling

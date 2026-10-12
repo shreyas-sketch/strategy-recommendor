@@ -2,8 +2,8 @@
 
 The export holds the executable logic as condition ASTs ("conditionJson") plus order legs.
 This module turns that into plain-English rules Claude can read, detects what the strategy
-trades and how (option buying/selling, straddles, directional), and suggests suitability
-and ideal market conditions. The admin reviews the draft before it is saved.
+trades and how (option buying/selling, straddles, directional), and suggests ideal market
+conditions. The admin reviews the draft before it is saved.
 """
 
 from __future__ import annotations
@@ -27,6 +27,7 @@ UNDERLYING_KEYS = {
 COMPARATORS = {">": "is above", "<": "is below", ">=": "is at or above", "<=": "is at or below",
                "==": "equals", "!=": "is not", "crosses above": "crosses above", "crosses below": "crosses below"}
 TIME_COMPARATORS = {">": "is after", "<": "is before", ">=": "is at or after", "<=": "is at or before"}
+ARITHMETIC = {"+", "-", "*", "/", "(", ")"}
 
 
 class TradetronError(ValueError):
@@ -70,6 +71,8 @@ def _value(p: dict) -> str:
 def _kw(k: dict) -> str:
     name = k.get("name", "?")
     ps = k.get("params") or []
+    if name in ARITHMETIC and not ps:
+        return name
     vals = [_value(p) for p in ps]
     raw = [p.get("value") for p in ps if p.get("type") == "value"]
     if name == "Instrument Name":
@@ -87,7 +90,10 @@ def _kw(k: dict) -> str:
         return f"{name.title() if name != 'VWAP' else 'VWAP'}({args}) of {vals[0]}" if vals else name
     if name == "Position":                       # (series, index): -1 last completed candle, 0 current
         idx = raw[-1] if raw else ""
-        when = {"-1": "last completed candle", "0": "current (forming) candle"}.get(str(idx), f"candle {idx}")
+        when = {"-1": "last completed candle", "0": "current (forming) candle",
+                "-2": "candle before that"}.get(str(idx))
+        if when is None:
+            when = f"candle {abs(int(idx))} back" if re.fullmatch(r"-?\d+", str(idx)) else f"candle {idx}"
         return f"{vals[0]} on the {when}"
     if name == "Time":
         return "the time"
@@ -97,6 +103,15 @@ def _kw(k: dict) -> str:
         return f"open {raw[2] if len(raw) > 2 else ''} {raw[3] if len(raw) > 3 else 'quantity'} on {raw[4] if len(raw) > 4 else ''}".strip()
     if name == "Traded Instrument Name":         # (stage, field, underlying, set, ?, leg)
         return f"the traded leg {raw[5] if len(raw) > 5 else '?'} of set {raw[3] if len(raw) > 3 else '?'}"
+    if name == "Traded Instrument":              # (stage, field, underlying, set, ?, leg) -> e.g. its entry price
+        field = raw[1] if len(raw) > 1 else "price"
+        stage = (raw[0] if raw else "Entry").lower()
+        what = "price" if field == "price" else field
+        return f"the {stage} {what} of traded leg {raw[5] if len(raw) > 5 else '?'} of set {raw[3] if len(raw) > 3 else '?'}"
+    if name == "LTP":
+        return f"the live price (LTP) of {vals[0]}" if vals else "the live price (LTP)"
+    if name == "Round":
+        return f"{vals[0]} rounded to the nearest {vals[1]}" if len(vals) > 1 else f"{vals[0] if vals else '?'} rounded"
     if name == "Days Difference (D2-D1)":
         return f"days from {vals[0]} to {vals[1]}" if len(vals) > 1 else "days difference"
     if name == "Today":
@@ -115,14 +130,25 @@ def _kw(k: dict) -> str:
     return f"{name}({', '.join(vals)})"
 
 
+def _expr(elements: list[dict]) -> str:
+    """Operands joined with arithmetic, e.g. [X, +, Number 38] -> 'X + 38'; brackets kept tight."""
+    text = " ".join(_kw(e) for e in elements)
+    text = re.sub(r"\(\s+", "(", re.sub(r"\s+\)", ")", text))
+    if text.startswith("(") and text.endswith(")") and text.count("(") == 1:
+        text = text[1:-1]
+    return text
+
+
 def _rule(elements: list[dict]) -> str:
-    if len(elements) == 3 and elements[1].get("name") in COMPARATORS:
-        lhs, op, rhs = elements
-        left, right = _kw(lhs), _kw(rhs)
-        verb = COMPARATORS[op["name"]]
-        if lhs.get("name") == "Time":
+    ops = [i for i, e in enumerate(elements) if e.get("name") in COMPARATORS and not e.get("params")]
+    if len(ops) == 1:
+        i = ops[0]
+        lhs, rhs = elements[:i], elements[i + 1:]
+        left, right = _expr(lhs), _expr(rhs)
+        verb = COMPARATORS[elements[i]["name"]]
+        if len(lhs) == 1 and lhs[0].get("name") == "Time":
             right = _time(right)
-            verb = TIME_COMPARATORS.get(op["name"], verb)
+            verb = TIME_COMPARATORS.get(elements[i]["name"], verb)
         return f"{left} {verb} {right}"
     return " ".join(_kw(e) if e.get("name") not in COMPARATORS else COMPARATORS[e["name"]] for e in elements)
 
@@ -152,8 +178,16 @@ def _parse_condition(cond: dict) -> str:
     return cond.get("conditionDisplay") or cond.get("conditionValue") or ""
 
 
+_POINTS_STRIKE = re.compile(r"tt_round \( tt_get_var \( tt_get_instrument \( '[^']*' \) , 'LTP' \) , '\d+' \) ([+-]) tt_Number \( '(\d+)' \)")
+
+
 def _moneyness(opt: str, strike_expr: str) -> str:
-    """'tt_ATM_SPOT ( 'NIFTY BANK', '2' )' on a PE -> '2 strikes in the money'. Calls: + is OTM; puts: + is ITM."""
+    """'tt_ATM_SPOT ( 'NIFTY BANK', '2' )' on a PE -> '2 strikes in the money'. Calls: + is OTM; puts: + is ITM.
+    Fixed strikes like 'round(spot, 100) + 200' are described in index points."""
+    p = _POINTS_STRIKE.search(strike_expr)
+    if p and opt in ("CE", "PE") and int(p.group(2)):
+        itm = (p.group(1) == "-") if opt == "CE" else (p.group(1) == "+")
+        return f"about {p.group(2)} points {'in' if itm else 'out of'} the money"
     m = re.search(r"tt_ATM(?:_SPOT|_FUT)?\s*\(\s*'[^']+'\s*,\s*'(-?\d+)'", strike_expr)
     if not m or opt not in ("CE", "PE") or int(m.group(1)) == 0:
         return ""
@@ -179,7 +213,10 @@ def describe_leg(leg: dict) -> str:
         strike = leg.get("strikeDisplay") or leg.get("strike") or ""
     instrument = f"{opt} {strike}".strip() if opt in ("CE", "PE") else (opt or "futures/stock")
     moneyness = _moneyness(opt, leg.get("strike") or "")
-    if moneyness:
+    if moneyness and "points" in moneyness:     # formula strike, e.g. round(spot, 100) + 200
+        formula = strike.replace("the live price (LTP) of ", "").replace(" (spot/index)", " spot")
+        instrument = f"{opt}, strike = {formula} ({moneyness})"
+    elif moneyness:
         instrument += f" = {moneyness}"
     expiry = (leg.get("expiryType") or "").lower()
     product = {"MIS": "intraday (MIS)", "NRML": "NRML"}.get(leg.get("productType"), leg.get("productType") or "")
@@ -209,6 +246,7 @@ def _intraday_exit(sets: list[dict]) -> str | None:
     return None
 
 
+_PREMIUM_SL = re.compile(r"find_traded_instrument \( 'strategy_id', 'run_counter', 'Entry', 'instrument'[^)]*\) , 'LTP' \) > \( find_traded_instrument \( 'strategy_id', 'run_counter', 'Entry', 'price'[^)]*\) \+ tt_Number \( '(\d+)' \)")
 _DAYS_DIFF = re.compile(r"tt_days_diff \( tt_Today \( '[A-Z]+' \) , tt_curr_(?:week|month)expiry \( '[^']+', '0' \)\s*\) == tt_Number \( '(\d+)' \)")
 _IS_EXPIRY = re.compile(r"tt_Today \( '[A-Z]+' \) == tt_curr_(?:week|month)expiry")
 
@@ -334,6 +372,13 @@ def analyse(data: dict) -> dict:
         facts.append("Position size varies by set: " + ", ".join(f"{n} set(s) with {q} lot(s) per leg" for q, n in lots.items()) + ".")
     if capital:
         facts.append(f"Capital required (per Tradetron): ₹{capital:,}.")
+    sl_points = sorted({int(n) for n in _PREMIUM_SL.findall(json.dumps(data))})
+    if sl_points:
+        side = "short" if sells and not buys else "traded"
+        facts.append(f"Stop-loss: a {side} option is closed when its premium rises "
+                     f"{' / '.join(map(str, sl_points))} points above the entry price (per unit; × lot size per lot)."
+                     if side == "short" else
+                     f"Stop-loss on premium: {' / '.join(map(str, sl_points))} points from the entry price.")
     tags = [t.get("label") for t in data.get("tags") or [] if isinstance(t, dict) and t.get("label")]
     if tags:
         facts.append("Tradetron tags: " + ", ".join(tags) + ".")
