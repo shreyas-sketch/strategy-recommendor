@@ -24,7 +24,7 @@ pip install -r requirements-dev.txt
 cp .env.example .env            # fill in ANTHROPIC_API_KEY, ADMIN_TOKEN, …
 echo "COOKIE_SECURE=0" >> .env  # local http only
 uvicorn app.main:app --reload
-pytest                          # 68 tests
+pytest                          # 77 tests
 ```
 
 * Admin: http://localhost:8000/admin (sign in with `ADMIN_TOKEN`)
@@ -184,6 +184,27 @@ strategies are judged on Bank Nifty, and the NIFTY/SENSEX straddle on both index
   gives Claude today's date and weekday (for expiry-day strategies).
 * **Market check:** for an instrument, ranks only the strategies that trade it, plus
   generic ones.
+
+### Expiry calendar (Groww)
+
+With Groww keys set, the app fetches each index's F&O expiry dates from Groww's
+`historical/expiries` endpoint once a day, and caches them on the volume.
+* **Facts per index:** next expiry, weekly or monthly, calendar and trading days to expiry
+  (your holiday list is excluded), whether today is expiry day or the day before, and the
+  next monthly expiry.
+* **Weekly vs monthly** is worked out from the dates, so exchange schedule changes need
+  no code change.
+* **Strategy setting:** "Trades on which days" can be any day, expiry day only, or expiry
+  day + the day before. The importer detects it from Tradetron conditions such as
+  `tt_days_diff(Today, curr_weekexpiry) == 0/1`.
+* **On days a strategy won't trade,** it's left out of the daily pick and the 1-day market
+  check, and shown as "Not trading today" with the next expiry dates.
+* **Claude sees** the expiry facts and weighs expiry-day dynamics for option strategies.
+* **Admin → Expiry calendar** shows the dates and has a refresh button.
+* **If Groww is down,** the last cached dates are used. If it was never reachable, nothing
+  is excluded and Claude is told the calendar is unavailable.
+* Index → Groww F&O underlying mapping is the `fno:` entry per instrument in
+  `config/settings.yaml`.
 
 ### Shipped strategies
 

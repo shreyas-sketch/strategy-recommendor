@@ -10,7 +10,7 @@ horizons:
 - 1w
 description: Short straddle / premium selling on NIFTY 50, SENSEX (intraday) using Supertrend.
 logic: "Style: Short straddle / premium selling on NIFTY 50, SENSEX.\nIntraday: everything is closed by 15:24 IST.\n\
-  Entries are tied to the weekly-expiry calendar (see the conditions) — it trades only on specific days.\nIndicators\
+  Trades only on expiry day and the day before.\nIndicators\
   \ used: Supertrend.\nPosition size varies by set: 2 set(s) with 1 lot(s) per leg, 2 set(s) with 2 lot(s) per leg.\n\
   Capital required (per Tradetron): ₹600,000.\n\nSet 1:\n  Entry when the time is at or after 09:16 AND close of\
   \ combined premium of NIFTY 50 current week ATM CE + NIFTY 50 current week ATM PE (1m candles) on the last completed\
@@ -62,6 +62,7 @@ risk_notes: 'Naked short options: losses are open-ended on a large move; margin-
 risk_level: high
 min_capital_inr: 600000
 min_experience: advanced
+active_days: expiry_and_day_before
 underlyings:
 - NIFTY50
 - SENSEX

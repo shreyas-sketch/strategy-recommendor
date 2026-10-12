@@ -24,7 +24,7 @@ function clearError() { $("error").classList.add("hidden"); }
 async function refresh() {
   clearError();
   const [cfg, usage] = await Promise.all([api("/api/admin/settings"), api("/api/admin/usage"), loadStrategies(),
-                                          loadParticipants(), loadNotifications()]);
+                                          loadParticipants(), loadNotifications(), loadExpiries()]);
   const s = cfg.settings;
   selectedModel = s.active_model;
 
@@ -159,6 +159,29 @@ $("participants").addEventListener("click", async (e) => {
   } catch (err) { showError(err); }
 });
 
+// ---- expiry calendar ----------------------------------------------------
+async function loadExpiries() {
+  const x = await api("/api/admin/expiries");
+  $("exp-status").innerHTML = x.disabled ? '<span class="pill avoid">disabled</span>'
+    : x.groww_configured ? '<span class="pill recommended">Groww connected</span>'
+    : (x.underlyings || []).some((r) => r.fetched)
+      ? '<span class="pill conditional">Groww keys not set — showing the last cached dates</span>'
+      : '<span class="pill avoid">Groww keys not set — expiry-aware features are off</span>';
+  $("exp-table").innerHTML = `<tr><th>Index</th><th>Next expiry</th><th>Type</th><th class="num">Trading days</th><th>Next monthly</th><th>Updated</th></tr>` +
+    (x.underlyings || []).map((r) => {
+      const i = r.info;
+      return `<tr><td>${esc(r.label)}</td><td>${i ? `${esc(i.next_expiry_weekday)} ${esc(i.next_expiry)}${i.is_expiry_day ? ' <span class="pill conditional">today</span>' : ""}` : '<span class="muted">—</span>'}</td>
+        <td>${i ? esc(i.next_expiry_type) : ""}</td><td class="num">${i ? esc(i.trading_days_to_expiry) : ""}</td>
+        <td>${i ? esc(i.next_monthly_expiry || "") : ""}</td><td class="small muted">${esc(r.fetched || "never")}</td></tr>`;
+    }).join("");
+}
+$("exp-refresh").onclick = async (e) => {
+  e.target.disabled = true;
+  try { await api("/api/admin/expiries/refresh", { method: "POST" }); await loadExpiries(); }
+  catch (err) { showError(err); }
+  finally { e.target.disabled = false; }
+};
+
 // ---- notifications ------------------------------------------------------
 async function loadNotifications() {
   const n = await api("/api/admin/notifications");
@@ -214,7 +237,7 @@ async function loadStrategies() {
     strategies.map((st) => `<tr><td>${esc(st.name)}${st.source ? ' <span class="pill conditional">Tradetron</span>' : ""}</td><td class="muted">${esc(st.id)}</td><td>${esc(st.category)}</td>
       <td>${esc((st.underlyings || []).join(", ") || "any")}</td>
       <td>${esc(st.horizons.join(", "))}</td>
-      <td class="small">${esc(st.risk_level)} risk · ${esc(st.min_experience)}+ · ₹${Number(st.min_capital_inr).toLocaleString("en-IN")}+</td>
+      <td class="small">${st.active_days && st.active_days !== "any" ? `<span class="pill conditional">${st.active_days === "expiry_day" ? "expiry day" : "expiry + day before"}</span> ` : ""}${esc(st.risk_level)} risk · ${esc(st.min_experience)}+ · ₹${Number(st.min_capital_inr).toLocaleString("en-IN")}+</td>
       <td class="actions"><button data-edit="${esc(st.id)}">Edit</button> <button class="danger" data-del="${esc(st.id)}">Delete</button></td></tr>`).join("");
 }
 
@@ -223,6 +246,7 @@ function openForm(st, { asDraft = false, existingId = null } = {}) {
   currentSource = st?.source || null;
   $("form-title").textContent = asDraft ? `Review import: ${st.name}${existingId ? " (updates existing)" : ""}` : st ? `Edit: ${st.name}` : "Add strategy";
   $("f-underlyings").value = (st?.underlyings || []).join(", ");
+  $("f-activedays").value = st?.active_days || "any";
   $("f-name").value = st?.name || ""; $("f-id").value = st?.id || ""; $("f-category").value = st?.category || "trend";
   $("f-description").value = st?.description || ""; $("f-logic").value = st?.logic || "";
   $("f-avoid").value = (st?.avoid_conditions || []).join("\n"); $("f-risk").value = st?.risk_notes || "";
@@ -292,6 +316,7 @@ $("strategy-form").addEventListener("submit", async (e) => {
     risk_notes: $("f-risk").value.trim(),
     underlyings: $("f-underlyings").value.split(",").map((x) => x.trim().toUpperCase()).filter(Boolean),
     source: currentSource,
+    active_days: $("f-activedays").value,
     risk_level: $("f-risklevel").value,
     min_capital_inr: Math.round(Number($("f-mincap").value || 0)),
     min_experience: $("f-minexp").value,

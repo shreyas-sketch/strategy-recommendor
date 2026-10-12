@@ -64,18 +64,28 @@ instruments:
     yfinance: "^NSEI"
     twelvedata: { symbol: "NIFTY", exchange: "NSE" }   # verify on your Twelve Data plan
     groww: { exchange: NSE, segment: CASH, groww_symbol: "NSE-NIFTY" }
+    fno: { exchange: NSE, underlying: NIFTY }   # Groww F&O underlying (expiry calendar)
   - key: BANKNIFTY
     label: "NIFTY BANK"
     yfinance: "^NSEBANK"
     twelvedata: { symbol: "BANKNIFTY", exchange: "NSE" }
     groww: { exchange: NSE, segment: CASH, groww_symbol: "NSE-BANKNIFTY" }
+    fno: { exchange: NSE, underlying: BANKNIFTY }   # Groww F&O underlying (expiry calendar)
   - key: FINNIFTY
     label: "NIFTY FIN SERVICE"
     yfinance: "NIFTY_FIN_SERVICE.NS"
     twelvedata: { symbol: "FINNIFTY", exchange: "NSE" }
     groww: { exchange: NSE, segment: CASH, groww_symbol: "NSE-FINNIFTY" }
+    fno: { exchange: NSE, underlying: FINNIFTY }   # Groww F&O underlying (expiry calendar)
+  - key: MIDCPNIFTY
+    label: "NIFTY MID SELECT"
+    yfinance: "NIFTY_MID_SELECT.NS"
+    twelvedata: { symbol: "MIDCPNIFTY", exchange: "NSE" }
+    groww: { exchange: NSE, segment: CASH, groww_symbol: "NSE-MIDCPNIFTY" }
+    fno: { exchange: NSE, underlying: MIDCPNIFTY }   # Groww F&O underlying (expiry calendar)
   - key: SENSEX
     label: "SENSEX"
     yfinance: "^BSESN"
     twelvedata: { symbol: "SENSEX", exchange: "BSE" }
     groww: { exchange: BSE, segment: CASH, groww_symbol: "BSE-SENSEX" }
+    fno: { exchange: BSE, underlying: SENSEX }   # Groww F&O underlying (expiry calendar)

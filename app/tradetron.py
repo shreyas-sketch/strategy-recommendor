@@ -194,6 +194,31 @@ def _intraday_exit(sets: list[dict]) -> str | None:
     return None
 
 
+_DAYS_DIFF = re.compile(r"tt_days_diff \( tt_Today \( '[A-Z]+' \) , tt_curr_(?:week|month)expiry \( '[^']+', '0' \)\s*\) == tt_Number \( '(\d+)' \)")
+_IS_EXPIRY = re.compile(r"tt_Today \( '[A-Z]+' \) == tt_curr_(?:week|month)expiry")
+
+
+def detect_active_days(sets: list[dict]) -> tuple[str, str | None]:
+    """'expiry_day' / 'expiry_and_day_before' when EVERY entry condition is pinned to expiry days."""
+    offsets: set[int] = set()
+    entries = [c for st in sets for c in st.get("conditions", []) if c.get("type") == "Entry"]
+    if not entries:
+        return "any", None
+    for c in entries:
+        text = c.get("conditionValue") or ""
+        found = {int(n) for n in _DAYS_DIFF.findall(text)}
+        if _IS_EXPIRY.search(text):
+            found.add(0)
+        if not found:
+            return "any", None
+        offsets |= found
+    if offsets == {0}:
+        return "expiry_day", None
+    if offsets == {0, 1}:
+        return "expiry_and_day_before", None
+    return "any", f"Entries are tied to expiry offsets {sorted(offsets)} days — set 'active days' manually if needed."
+
+
 def analyse(data: dict) -> dict:
     """Return a draft strategy dict (matching app.config.Strategy) plus warnings and the translated logic."""
     if data.get("_format") not in SUPPORTED_FORMATS:
@@ -231,6 +256,9 @@ def analyse(data: dict) -> dict:
             legs_all.extend(set_legs)
 
     exit_time = _intraday_exit(sets)
+    active_days, active_warning = detect_active_days(sets)
+    if active_warning:
+        warnings.append(active_warning)
     underlyings_raw = [leg.get("underlyingSymbol") for leg in legs_all if leg.get("underlyingSymbol")]
     underlyings = []
     for u in dict.fromkeys(underlyings_raw):
@@ -282,7 +310,10 @@ def analyse(data: dict) -> dict:
     facts = []
     if exit_time:
         facts.append(f"Intraday: everything is closed by {exit_time} IST.")
-    if expiry_bound:
+    if active_days != "any":
+        facts.append("Trades " + {"expiry_day": "only on expiry day",
+                                  "expiry_and_day_before": "only on expiry day and the day before"}[active_days] + ".")
+    elif expiry_bound:
         facts.append("Entries are tied to the weekly-expiry calendar (see the conditions) — it trades only on specific days.")
     if indicators:
         facts.append("Indicators used: " + ", ".join(i.title() for i in indicators) + ".")
@@ -310,7 +341,7 @@ def analyse(data: dict) -> dict:
         "description": description, "logic": logic[:12000], "ideal_conditions": ideal,
         "avoid_conditions": avoid, "risk_notes": risk_notes,
         "risk_level": risk, "min_capital_inr": capital, "min_experience": exp,
-        "underlyings": underlyings,
+        "underlyings": underlyings, "active_days": active_days,
     }
     warnings.append("Ideal market conditions, risk level and experience are suggestions from the strategy's structure — review them.")
     return {"draft": draft, "warnings": warnings}

@@ -17,7 +17,8 @@ function recHTML(payload, { personal = false } = {}) {
          <div class="muted small" style="margin-top:6px">Watch out: ${esc(top?.watch_out)}</div></section>`;
 
   const summary = personal
-    ? `<section class="card"><h2>Your portfolio today</h2><p style="margin-top:0">${esc(r.portfolio_summary)}</p>
+    ? `<section class="card"><h2>${meta.has_portfolio ? "Your portfolio today" : "Today's markets"}</h2><p style="margin-top:0">${esc(r.portfolio_summary)}</p>
+         ${expiryLine(payload.expiries, payload.markets)}
          <p class="muted">${esc(r.market_summary || "")}</p>
          ${(r.portfolio_risks || []).length ? `<ul>${r.portfolio_risks.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}
          ${payload.context ? holdingsTable(payload.context) : ""}</section>`
@@ -36,9 +37,13 @@ function recHTML(payload, { personal = false } = {}) {
     ? `${meta.engine === "claude" ? "AI analysis" : "Rule engine"} · markets analysed: ${esc((meta.markets || [meta.benchmark]).join(", "))} · data: ${esc(meta.data_provider)}`
     : `${meta.engine === "claude" ? `AI: ${esc(meta.model)}` : "Rule engine"} · data: ${esc(meta.data_provider)} · as of ${esc(new Date(payload.snapshot.as_of).toLocaleString())}${meta.cached ? ` · cached ${Math.round(meta.cache_age_s / 60)} min ago` : ""}`;
 
-  const excluded = (r.excluded || []).length ? `<section class="card"><h2>Not suitable for your profile</h2>
-      <p class="muted small" style="margin-top:0">These are never recommended to you. Update your profile in Settings if it has changed.</p>
-      ${r.excluded.map((x) => `<div class="strat"><b>${esc(name(x.strategy_id))}</b>
+  const kinds = new Set((r.excluded || []).map((x) => x.kind || "profile"));
+  const exTitle = kinds.has("schedule") && kinds.has("profile") ? "Not available to you today"
+    : kinds.has("schedule") ? "Not trading today" : "Not suitable for your profile";
+  const exNote = kinds.has("profile") ? "Profile exclusions are never recommended to you — update your profile in Settings if it has changed. " : "";
+  const excluded = (r.excluded || []).length ? `<section class="card"><h2>${exTitle}</h2>
+      <p class="muted small" style="margin-top:0">${exNote}${kinds.has("schedule") ? "Some strategies only trade on expiry days (exchange calendar via Groww)." : ""}</p>
+      ${r.excluded.map((x) => `<div class="strat"><b>${esc(name(x.strategy_id))}</b> <span class="pill ${x.kind === "schedule" ? "conditional" : "avoid"}">${x.kind === "schedule" ? "schedule" : "profile"}</span>
         <ul class="small reasons">${x.reasons.map((why) => `<li>${esc(why)}</li>`).join("")}</ul></div>`).join("")}</section>` : "";
 
   return notice + topCard + comparisonHTML(r, name, noTrade) + summary +
@@ -63,10 +68,23 @@ function comparisonHTML(r, name, noTrade) {
     <p style="margin-top:0">${esc(r.why_top_over_others)}</p>${table}</section>`;
 }
 
+function expiryText(e) {
+  if (!e || typeof e !== "object") return null;
+  if (e.is_expiry_day) return `${e.next_expiry_type} expiry today`;
+  return `${e.next_expiry_type} expiry ${e.next_expiry_weekday} ${e.next_expiry} (${e.trading_days_to_expiry} trading day${e.trading_days_to_expiry === 1 ? "" : "s"})`;
+}
+
+function expiryLine(expiries, markets) {
+  const rows = Object.entries(expiries || {}).map(([k, e]) => [markets?.[k]?.instrument || k, expiryText(e)]).filter(([, t]) => t);
+  return rows.length ? `<p class="small muted">Expiries: ${rows.map(([l, t]) => `<b>${esc(l)}</b> — ${esc(t)}`).join(" · ")}</p>` : "";
+}
+
 function regimeCard(s, summary) {
   const g = s.regime, p = s.primary;
   const stats = [["Trend", g.trend], ["Strength", g.trend_strength], ["Volatility", `${g.volatility} (${g.volatility_score})`],
     ["Squeeze", g.squeeze ? "yes" : "no"], ["ADX", p.adx], ["Return", `${p.window_return_pct}%`]];
+  const exp = expiryText(s.expiry);
+  if (exp) stats.push(["Next expiry", exp]);
   return `<section class="card"><h2>Market regime</h2><div class="grid">${stats.map(([k, v]) =>
     `<div class="stat"><div class="k">${k}</div><div class="v">${esc(v)}</div></div>`).join("")}</div>
     <p style="margin:12px 0 0">${esc(summary)}</p></section>`;

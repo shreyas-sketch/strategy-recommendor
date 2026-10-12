@@ -22,6 +22,7 @@ from .data.base import ProviderError
 from .notify import AISensyClient, DailyJobs, scheduler_loop
 from .portfolio import TEMPLATE_CSV, GrowwIsinResolver, PortfolioAdvisor, PortfolioError, parse_portfolio
 from .profile import TradingProfile, apply_profile, split
+from .expiries import ExpiryCalendar
 from .tradetron import TradetronError, analyse as analyse_tradetron, load_export
 from .service import BudgetExceeded, QuotaExceeded, RecommendationService, today_ist
 from .store import Store
@@ -106,6 +107,8 @@ def create_app(settings: Settings | None = None, service: RecommendationService 
     settings = settings or Settings()
     service = service or RecommendationService(settings, Store(settings.data_dir / "app.db"))
     store = service.store
+    if service.calendar is None and os.environ.get("EXPIRY_CALENDAR", "1") != "0":
+        service.calendar = ExpiryCalendar(settings)
     advisor = jobs.advisor if jobs else PortfolioAdvisor(service)
     jobs = jobs or DailyJobs(advisor, AISensyClient())
     isin_resolver = GrowwIsinResolver(settings.data_dir)
@@ -513,6 +516,21 @@ def create_app(settings: Settings | None = None, service: RecommendationService 
             raise HTTPException(404, "Unknown participant")
         store.delete_user(user_id)   # cascades to sessions, portfolio, recommendations, logs
         return {"deleted": user_id}
+
+    # ---- admin: expiry calendar --------------------------------------------
+    @app.get("/api/admin/expiries", dependencies=[Depends(require_admin)])
+    def expiries():
+        if service.calendar is None:
+            return {"groww_configured": False, "underlyings": [], "disabled": True}
+        return service.calendar.status()
+
+    @app.post("/api/admin/expiries/refresh", dependencies=[Depends(require_admin)])
+    def refresh_expiries():
+        if service.calendar is None:
+            raise HTTPException(409, "Expiry calendar is disabled")
+        result = service.calendar.refresh()
+        store.cache_clear()
+        return result
 
     # ---- admin: notifications --------------------------------------------
     @app.get("/api/admin/notifications", dependencies=[Depends(require_admin)])

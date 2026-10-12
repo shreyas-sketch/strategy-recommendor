@@ -11,6 +11,7 @@ import anthropic
 from .analysis.regime import build_snapshot, fetch_specs, rule_scores
 from .config import CHEAPEST_MODEL, Horizon, Settings
 from .data.providers import DataRouter, now_ist
+from .expiries import schedule_check
 from .llm.recommender import NO_TRADE, ClaudeRecommender, RecommendationRefused
 from .store import Store
 
@@ -54,12 +55,13 @@ class TTLCache:
 
 class RecommendationService:
     def __init__(self, settings: Settings, store: Store, router: DataRouter | None = None,
-                 recommender: ClaudeRecommender | None = None, clock=time.time):
+                 recommender: ClaudeRecommender | None = None, clock=time.time, calendar=None):
         self.settings = settings
         self.store = store
         self.router = router or DataRouter()
         self.recommender = recommender or ClaudeRecommender()
         self.clock = clock
+        self.calendar = calendar          # ExpiryCalendar (Groww); None disables expiry awareness
         self._snapshots = TTLCache()
 
     # ---- which engine/model runs this request ----------------------------
@@ -138,11 +140,23 @@ class RecommendationService:
             traded = sorted({u for s in all_for_horizon for u in s.underlyings})
             raise ValueError(f"No {horizon} strategy trades {instrument['key']}. "
                              f"Analyse one of: {', '.join(traded) or 'none configured'}")
+        # Intraday horizon: strategies pinned to expiry days only count on the days they actually trade.
+        schedule_excluded = []
+        if horizon == "1d":
+            keep = []
+            for s in strategies:
+                why = schedule_check(s, self.calendar)
+                if why:
+                    schedule_excluded.append({"strategy_id": s.id, "reasons": [why], "kind": "schedule"})
+                else:
+                    keep.append(s)
+            strategies = keep
         engine = self.resolve_engine()
         admin = self.settings.admin
 
         cache_key = "|".join([RESULT_SCHEMA, instrument["key"], horizon, engine["engine"], engine["model"] or "-",
-                              admin.effort, self.settings.catalog_hash()])
+                              admin.effort, self.settings.catalog_hash(), today_ist(),
+                              ",".join(sorted(e["strategy_id"] for e in schedule_excluded))])
         max_age = 60 * admin.cache_minutes.get(horizon, 0)
         now = self.clock()
         if not force_refresh and max_age > 0:
@@ -159,6 +173,20 @@ class RecommendationService:
                                 "Try an instrument others have checked recently, or come back tomorrow.")
 
         snapshot, provider = self.market_snapshot(instrument, horizon)
+        if self.calendar is not None and instrument.get("fno") and horizon in ("1d", "1w"):
+            expiry = self.calendar.info(instrument["key"])
+            snapshot = {**snapshot, "expiry": expiry or "unavailable"}
+        cards = strategy_cards(all_for_horizon)
+        if not strategies:
+            rec = {"market_summary": "", "regime": snapshot["regime"]["label"], "confidence": "high",
+                   "top_strategy_id": NO_TRADE, "rankings": [], "deciding_factors": [], "reassess_if": [],
+                   "why_top_over_others": "None of the strategies for this instrument trade today.",
+                   "excluded": schedule_excluded}
+            return {"recommendation": rec, "snapshot": snapshot, "rule_scores": [], "strategies": cards,
+                    "meta": {"instrument": instrument["key"], "instrument_label": instrument["label"],
+                             "horizon": horizon, "data_provider": provider, "engine": "rules", "model": None,
+                             "effort": admin.effort, "note": None, "cost_usd": 0.0, "cached": False,
+                             "generated_at": now}}
         scores = rule_scores(snapshot["regime"], strategies)
 
         meta = {"instrument": instrument["key"], "instrument_label": instrument["label"],
@@ -183,9 +211,10 @@ class RecommendationService:
 
         if recommendation is None:
             recommendation = rules_recommendation(snapshot, scores, strategies)
+        recommendation["excluded"] = schedule_excluded
 
         payload = {"recommendation": recommendation, "snapshot": snapshot, "rule_scores": scores,
-                   "strategies": strategy_cards(strategies), "meta": meta}
+                   "strategies": cards, "meta": meta}
         if max_age > 0:
             self.store.cache_put(cache_key, payload, now)
         return payload

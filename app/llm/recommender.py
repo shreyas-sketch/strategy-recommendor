@@ -80,6 +80,7 @@ How to decide:
 - Use ONLY the numbers in the market snapshot. Do not invent news, events or prices.
 - Compare the regime (trend, trend strength, volatility, squeeze, gaps, choppiness) against each strategy's logic, ideal conditions and avoid conditions.
 - The rule_score is a simple pre-computed match; use it as a hint, and override it when the detailed numbers disagree (e.g. ADX and efficiency ratio conflict, intraday and daily trends disagree, volatility is rising fast).
+- If the snapshot has an "expiry" block (from the exchange calendar), weigh it for option strategies: expiry day brings fast premium decay and sharp late moves; few days to expiry means high gamma; a monthly expiry far away means slower decay.
 - Mixed or conflicting signals should lower confidence. If no strategy is a reasonable fit, set top_strategy_id to {no_trade} and say why — sitting out is a valid recommendation.
 - Rank every strategy in the catalog exactly once, using its exact id. Fit scores must be consistent with the order.
 - Justify the pick against the alternatives, not just on its own merits. Participants must be able to verify why the top pick beats each other strategy:
@@ -123,6 +124,7 @@ Each morning a participant asks: "Which ONE of the platform's strategies should 
 How to decide:
 - Use ONLY the numbers provided. Do not invent news, events, expiry dates you were not given, or prices.
 - Each strategy trades the index listed in its "underlyings". Judge it on THAT index's regime in underlying_markets — never on a different index. A strategy with no underlyings is generic: judge it on the benchmark.
+- expiry_calendar gives each index's next expiry from the exchange calendar (days to expiry, whether today is expiry day or the day before, weekly vs monthly). Strategies that do not trade today were already removed. Weigh expiry effects for option strategies: expiry day = fast premium decay and sharp late moves; near expiry = high gamma.
 - Read each strategy's logic carefully: option buying needs movement and suffers from time decay in ranges; option selling and straddles profit from calm or decaying premium and suffer on trending or volatile days; note day-of-week or expiry-day conditions (today's date and weekday are given) and say so if a strategy may not trigger today.
 - If a portfolio is provided, also weigh it: concentration, how much is trending up/down or sideways, volatility of the largest holdings, unrealised profit or loss (e.g. a portfolio heavy in falling stocks may call for a strategy that profits from or offsets downside). If portfolio is null, decide on the markets and the profile only.
 - run_on: the index (or holding symbol) the strategy will trade — normally its underlying.

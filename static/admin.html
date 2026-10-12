@@ -120,6 +120,16 @@
 
     <section class="card">
       <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:8px">
+        <h2 style="margin:0">Expiry calendar (Groww)</h2>
+        <button id="exp-refresh">Refresh now</button>
+      </div>
+      <div id="exp-status" class="small" style="margin-bottom:8px"></div>
+      <div class="table-scroll"><table id="exp-table"></table></div>
+      <p class="muted small">Fetched from Groww once a day. Strategies set to trade only on expiry days are left out on other days.</p>
+    </section>
+
+    <section class="card">
+      <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:8px">
         <h2 style="margin:0">Strategies</h2>
         <div class="row">
           <button id="reload">Reload from files</button>
@@ -151,6 +161,9 @@
         <fieldset><legend>Horizons it is meant for</legend><div class="checks" data-group="horizons" data-values="1d,1w,1m" data-labels="1 Day,1 Week,1 Month"></div></fieldset>
         <fieldset><legend>Instruments</legend><div class="checks" data-group="instruments" data-values="index,equity,options,futures"></div></fieldset>
         <div><label for="f-underlyings">Trades on (index keys, comma-separated)</label><input id="f-underlyings" placeholder="BANKNIFTY, NIFTY50"></div>
+        <div><label for="f-activedays">Trades on which days</label><select id="f-activedays">
+          <option value="any">Any trading day</option><option value="expiry_day">Expiry day only</option>
+          <option value="expiry_and_day_before">Expiry day and the day before</option></select></div>
         <div class="full"><label for="f-description">Short description (participants see this)</label><input id="f-description" maxlength="300"></div>
         <div class="full"><label for="f-logic">Logic — entry, exit, stop-loss, sizing (Claude reads this)</label><textarea id="f-logic" rows="10" required></textarea></div>
         <fieldset><legend>Ideal trend</legend><div class="checks" data-group="trend" data-values="up,down,sideways"></div></fieldset>

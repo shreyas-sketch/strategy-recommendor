@@ -94,7 +94,7 @@ def test_market_tool_overlay_is_per_person(env, web):
     assert a["recommendation"]["top_strategy_id"] == "ema_trend_follow"
     assert "does not suit your profile" in a["recommendation"]["why_top_over_others"]
     assert b["recommendation"]["top_strategy_id"] == "bb_mean_reversion"
-    assert "excluded" not in b["recommendation"]
+    assert b["recommendation"]["excluded"] == []
 
 
 def test_admin_sets_strategy_suitability(env, web):

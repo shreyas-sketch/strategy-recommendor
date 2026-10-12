@@ -61,7 +61,7 @@ def split(strategies: list[Strategy], profile: TradingProfile | None) -> tuple[l
     for s in strategies:
         reasons = ineligibility(s, profile)
         if reasons:
-            excluded.append({"strategy_id": s.id, "reasons": reasons})
+            excluded.append({"strategy_id": s.id, "reasons": reasons, "kind": "profile"})
         else:
             eligible.append(s)
     return eligible, excluded
@@ -86,7 +86,8 @@ def profile_for_prompt(profile: TradingProfile | None) -> dict | None:
 def apply_profile(rec: dict, eligible_ids: set[str], excluded: list[dict], names: dict[str, str]) -> dict:
     """Personalise a (possibly shared) recommendation: drop ineligible strategies, re-pick if needed."""
     rec = copy.deepcopy(rec)
-    rec["excluded"] = excluded
+    already = {e["strategy_id"] for e in rec.get("excluded", [])}
+    rec["excluded"] = rec.get("excluded", []) + [e for e in excluded if e["strategy_id"] not in already]
     if not excluded:
         return rec
     market_top = rec.get("top_strategy_id")

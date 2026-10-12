@@ -17,6 +17,7 @@ import requests
 from .analysis.regime import rule_scores
 from .data.base import ProviderError
 from .data.providers import now_ist
+from .expiries import expiry_context, schedule_check
 from .llm.recommender import NO_TRADE, RecommendationRefused
 from .profile import TradingProfile, apply_profile, profile_for_prompt, split
 from .service import RecommendationService, _RulesOnly, rules_recommendation, strategy_cards, today_ist
@@ -319,6 +320,16 @@ class PortfolioAdvisor:
             raise ValueError("No strategies are configured for the 1-day horizon")
         profile = self.profile(user_id)
         eligible, excluded = split(strategies, profile)
+        # Strategies pinned to expiry days are dropped on days they won't trade (Groww expiry calendar).
+        calendar = self.service.calendar
+        tradeable = []
+        for s in eligible:
+            why = schedule_check(s, calendar)
+            if why:
+                excluded.append({"strategy_id": s.id, "reasons": [why], "kind": "schedule"})
+            else:
+                tradeable.append(s)
+        eligible = tradeable
         eligible_ids = {s.id for s in eligible}
         names = {s.id: s.name for s in strategies}
         cards = strategy_cards(strategies)
@@ -331,9 +342,11 @@ class PortfolioAdvisor:
             # Nothing suits this participant: no market data or AI call needed.
             rec = {"market_summary": "", "portfolio_summary": "", "confidence": "high", "top_strategy_id": NO_TRADE,
                    "run_on": "", "why": "", "rankings": [], "deciding_factors": [], "portfolio_risks": [],
-                   "why_top_over_others": "None of the platform's strategies suit your trading profile yet. "
-                                          "Review your profile in Settings or ask the admin.",
-                   "whatsapp_line": "No strategy suits your current trading profile.", "excluded": excluded}
+                   "why_top_over_others": ("None of the strategies that suit you trade today."
+                                           if any(e["kind"] == "schedule" for e in excluded) else
+                                           "None of the platform's strategies suit your trading profile yet. "
+                                           "Review your profile in Settings or ask the admin."),
+                   "whatsapp_line": "No strategy for you today.", "excluded": excluded}
             meta.update(engine="rules")
             return {"recommendation": rec, "strategies": cards, "meta": meta}
 
@@ -356,9 +369,11 @@ class PortfolioAdvisor:
 
         context = portfolio_context(self.service, portfolio["holdings"], views.get(bench_key)) if portfolio else None
         now = now_ist()
+        expiries = expiry_context(calendar, list(markets))
         prompt_context = {
             "today": {"date": day, "weekday": now.strftime("%A")},
             "underlying_markets": views,
+            "expiry_calendar": expiries,
             "portfolio": context,
             "participant_profile": profile_for_prompt(profile),
             "eligible_strategy_ids": sorted(s.id for s in judged),
@@ -369,13 +384,14 @@ class PortfolioAdvisor:
         shared_key = None
         if not portfolio:
             engine = self.service.resolve_engine()
-            shared_key = "|".join(["today-v1", day, engine["engine"], engine["model"] or "-", admin.effort,
+            shared_key = "|".join(["today-v2", day, engine["engine"], engine["model"] or "-", admin.effort,
                                    self.settings.catalog_hash(), ",".join(sorted(s.id for s in judged)),
                                    json.dumps(profile_for_prompt(profile), sort_keys=True)])
             hit = self.store.cache_get(shared_key, 20 * 3600, time.time())
             if hit:
                 meta.update(hit["meta_extra"], shared=True)
-                return {"recommendation": hit["rec"], "markets": views, "strategies": cards, "meta": meta}
+                return {"recommendation": hit["rec"], "markets": views, "expiries": expiries, "strategies": cards,
+                        "meta": meta}
 
         rec = None
         try:
@@ -407,12 +423,17 @@ class PortfolioAdvisor:
         rec["whatsapp_line"] = _clean_param(rec.get("whatsapp_line", ""), 150)
         if rec["top_strategy_id"] != NO_TRADE:
             top = next((s for s in strategies if s.id == rec["top_strategy_id"]), None)
-            default_on = ", ".join(self.settings.instrument(u)["label"] for u in top.underlyings) if top and top.underlyings else meta["benchmark"]
-            rec["run_on"] = _clean_param(rec.get("run_on") or default_on, 40)
+            run_on = rec.get("run_on") or ""
+            if top and top.underlyings:
+                # A strategy that trades a specific index always runs on that index, whatever the model wrote.
+                labels = [self.settings.instrument(u)["label"] for u in top.underlyings]
+                if not any(x.upper() in run_on.upper() for x in labels + list(top.underlyings)):
+                    run_on = ", ".join(labels)
+            rec["run_on"] = _clean_param(run_on or meta["benchmark"], 40)
         if shared_key:
             self.store.cache_put(shared_key, {"rec": rec, "meta_extra": {k: meta.get(k) for k in (
                 "engine", "model", "note", "data_provider", "benchmark", "markets")}}, time.time())
-        out = {"recommendation": rec, "markets": views, "strategies": cards, "meta": meta}
+        out = {"recommendation": rec, "markets": views, "expiries": expiries, "strategies": cards, "meta": meta}
         if context:
             out["context"] = context
         return out

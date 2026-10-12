@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import os
+import re
 import threading
 import time
 import uuid
@@ -87,6 +89,25 @@ class GrowwProvider(Provider):
             raise ProviderError(f"Groww: {msg}")
         candles = (body.get("payload") or body).get("candles") or []
         return normalize(parse_candle_rows(candles))
+
+
+    def fetch_expiries(self, exchange: str, underlying: str, year: int, month: int | None = None) -> list[str]:
+        """F&O expiry dates (YYYY-MM-DD) for an underlying. Mirrors growwapi 1.5 `get_expiries`."""
+        params = {"exchange": exchange, "underlying_symbol": underlying, "year": str(year)}
+        if month:
+            params["month"] = str(month)
+        token = self._get_token()
+        resp = requests.get(f"{self.BASE}/historical/expiries", headers=self._headers(token),
+                            params=params, timeout=HTTP_TIMEOUT)
+        if resp.status_code == 401 and os.environ.get("GROWW_API_KEY"):
+            resp = requests.get(f"{self.BASE}/historical/expiries", headers=self._headers(self._get_token(refresh=True)),
+                                params=params, timeout=HTTP_TIMEOUT)
+        body = _json(resp)
+        if not resp.ok or body.get("status") == "FAILURE":
+            msg = (body.get("error") or {}).get("message", f"HTTP {resp.status_code}")
+            raise ProviderError(f"Groww expiries: {msg}")
+        # The SDK documents only "the list of expiry dates"; collect every ISO date in the payload.
+        return sorted(set(re.findall(r"\b(\d{4}-\d{2}-\d{2})", json.dumps(body.get("payload", body)))))
 
 
 class TwelveDataProvider(Provider):

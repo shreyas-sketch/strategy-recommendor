@@ -101,6 +101,8 @@ class Strategy(BaseModel):
     # Instrument keys (config/settings.yaml) this strategy trades, e.g. ["BANKNIFTY"]. Each strategy is
     # judged on the market regime of its own underlying(s). Empty = generic (judged on the analysed instrument).
     underlyings: list[Annotated[str, Field(pattern=r"^[A-Z0-9&_\-]{1,24}$")]] = []
+    # Which days it actually enters trades (checked against the Groww expiry calendar of its underlyings).
+    active_days: Literal["any", "expiry_day", "expiry_and_day_before"] = "any"
     # Where it came from, e.g. {"format": "tt-strategy/v2", "original_name": ..., "sha256": ...}
     source: dict | None = None
 
