@@ -134,7 +134,7 @@ class ExpiryCalendar:
 
 def _groww_configured() -> bool:
     import os
-    return bool(os.environ.get("GROWW_ACCESS_TOKEN") or (os.environ.get("GROWW_API_KEY") and os.environ.get("GROWW_API_SECRET")))
+    return bool(os.environ.get("GROWW_ACCESS_TOKEN")) or GrowwProvider.can_mint()
 
 
 def schedule_check(strategy, calendar: ExpiryCalendar | None, today: date | None = None) -> str | None:

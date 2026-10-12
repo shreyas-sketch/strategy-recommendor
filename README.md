@@ -24,7 +24,7 @@ pip install -r requirements-dev.txt
 cp .env.example .env            # fill in ANTHROPIC_API_KEY, ADMIN_TOKEN, …
 echo "COOKIE_SECURE=0" >> .env  # local http only
 uvicorn app.main:app --reload
-pytest                          # 77 tests
+pytest                          # 83 tests
 ```
 
 * Admin: http://localhost:8000/admin (sign in with `ADMIN_TOKEN`)
@@ -40,7 +40,7 @@ pytest                          # 77 tests
    through `RAILWAY_VOLUME_MOUNT_PATH`.
 3. **Variables:** `ANTHROPIC_API_KEY`, `ADMIN_TOKEN` (at least 24 random characters, e.g.
    `python -c "import secrets; print(secrets.token_urlsafe(32))"`), `AISENSY_API_KEY`, and
-   your data keys (`GROWW_API_KEY` + `GROWW_API_SECRET`, `TWELVEDATA_API_KEY`).
+   your data keys (`GROWW_API_KEY` + `GROWW_TOTP_SECRET` for a TOTP key, `TWELVEDATA_API_KEY`).
 4. **Networking → Generate domain.** Invite links use it automatically
    (`RAILWAY_PUBLIC_DOMAIN`), or set `PUBLIC_BASE_URL` for a custom domain.
 5. **Keep replicas at 1.** The 6 AM scheduler and SQLite live in the single process.
@@ -217,7 +217,7 @@ YAML), or copy `config/strategies/_TEMPLATE.yaml`.
 
 | Provider | Key | Notes |
 |---|---|---|
-| **Groww** | `GROWW_ACCESS_TOKEN`, or `GROWW_API_KEY` + `GROWW_API_SECRET` | Best for NSE/BSE. The app mints the daily token from key + secret. |
+| **Groww** | `GROWW_API_KEY` + `GROWW_TOTP_SECRET` (TOTP key), or `GROWW_API_KEY` + `GROWW_API_SECRET` (approval key) | Best for NSE/BSE + the F&O expiry calendar. The app logs in itself (generating the 6-digit TOTP code from the secret) and again after Groww's daily 06:00 IST reset. |
 | **Twelve Data** | `TWELVEDATA_API_KEY` | Backup. Free plan: 8 req/min, which is too slow for many portfolios. |
 | **yfinance** | none | Free last resort. Unofficial and delayed. |
 
