@@ -103,3 +103,9 @@ button.danger { color: var(--bad); }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 label.btn { display: inline-block; border: 1px solid var(--border); background: var(--surface); color: var(--text); border-radius: 8px; padding: 8px 14px; cursor: pointer; font-size: 15px; margin: 0; }
 .warn-list { margin: 4px 0 0; padding-left: 18px; color: var(--warn); font-size: 13px; }
+.narrow-card { max-width: 440px; }
+body[data-role="admin"] .master-only { display: none; }
+.google-btn { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 12px; padding: 9px 14px;
+  border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); text-decoration: none; font-weight: 600; }
+.google-btn::before { content: "G"; font-weight: 800; color: #4285f4; }
+.or { text-align: center; color: var(--muted); font-size: 13px; margin: 12px 0 0; }

@@ -7,19 +7,36 @@
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-<header><div class="wrap"><h1>Recommender Admin</h1><a href="/">Participant view</a></div></header>
+<header><div class="wrap">
+  <h1>Recommender Admin</h1>
+  <div class="row" style="align-items:center">
+    <span class="muted small" id="who-admin"></span>
+    <button id="admin-logout" class="hidden">Sign out</button>
+    <a href="/">Participant view</a>
+  </div>
+</div></header>
 <main class="wrap">
-  <section class="card" id="login">
-    <h2>Sign in</h2>
-    <div class="row">
-      <div><label for="token">Admin token</label><input id="token" type="password" size="32"></div>
-      <button class="primary" id="signin">Open admin panel</button>
-    </div>
+  <section class="card narrow-card" id="login">
+    <h2>Admin sign in</h2>
+    <form id="admin-login-form">
+      <label for="a-email">Email</label>
+      <input id="a-email" type="email" autocomplete="username" required class="block">
+      <label for="a-password" style="margin-top:12px">Password</label>
+      <input id="a-password" type="password" autocomplete="current-password" required class="block">
+      <button class="primary block" style="margin-top:16px">Sign in</button>
+    </form>
+    <a class="google-btn hidden" id="admin-google" href="/auth/google/start?role=admin">Sign in with Google</a>
+    <details style="margin-top:14px"><summary>Use the admin token instead</summary>
+      <div class="row" style="margin-top:8px">
+        <input id="token" type="password" size="28" placeholder="ADMIN_TOKEN">
+        <button id="signin">Open</button>
+      </div>
+    </details>
   </section>
   <div id="error" class="error hidden" style="margin-bottom:16px"></div>
 
   <div id="panel" class="hidden">
-    <section class="card">
+    <section class="card master-only">
       <h2>AI model</h2>
       <p class="muted small">Takes effect immediately for the next analysis. Cached results are cleared when you switch.</p>
       <div class="models" id="models"></div>
@@ -44,7 +61,7 @@
       <div class="table-scroll"><table id="by-model"></table></div>
     </section>
 
-    <section class="card">
+    <section class="card master-only">
       <h2>Budget &amp; cost controls</h2>
       <div class="row">
         <div><label for="budget">Monthly budget (USD, 0 = unlimited)</label><input id="budget" type="number" min="0" step="1" size="10"></div>
@@ -73,16 +90,18 @@
       <h2>Participants</h2>
       <form id="add-participant" class="row">
         <div><label for="p-name">Name</label><input id="p-name" required maxlength="80"></div>
-        <div><label for="p-phone">WhatsApp number</label><input id="p-phone" required placeholder="98XXXXXXXX or 9198XXXXXXXX"></div>
-        <button class="primary">Add &amp; create invite link</button>
+        <div><label for="p-email">Google email</label><input id="p-email" type="email" placeholder="name@gmail.com"></div>
+        <div><label for="p-phone">WhatsApp number</label><input id="p-phone" placeholder="98XXXXXXXX"></div>
+        <button class="primary">Add participant</button>
       </form>
+      <p class="muted small" style="margin:6px 0 0">Give a Google email (they just click "Sign in with Google" — no link needed), a WhatsApp number (they get a password invite link), or both.</p>
       <details style="margin-top:12px"><summary>Bulk import (CSV)</summary>
-        <p class="muted small">Paste CSV with a header row <code>name,phone</code>. Each participant gets a personal invite link.</p>
-        <textarea id="import-csv" rows="5" placeholder="name,phone&#10;Asha Rao,9876543210"></textarea>
+        <p class="muted small">Paste CSV with a header row <code>name,email,phone</code> (email and/or phone per row). People with a phone get a personal invite link.</p>
+        <textarea id="import-csv" rows="5" placeholder="name,email,phone&#10;Asha Rao,asha@gmail.com,9876543210&#10;Ravi Kumar,ravi@gmail.com,"></textarea>
         <button id="import-btn" style="margin-top:8px">Import</button>
       </details>
       <div id="invites" class="hidden" style="margin-top:12px">
-        <div class="notice">Send each link privately (e.g. WhatsApp to that person). Links work once and expire in 7 days. They are shown only now.</div>
+        <div class="notice">Send each invite link privately (e.g. WhatsApp to that person). Links work once and expire in 7 days and are shown only now. People with only a Google email need no link — tell them to open the site and click "Sign in with Google".</div>
         <div class="table-scroll" style="margin-top:8px"><table id="invite-table"></table></div>
         <button id="invite-csv" style="margin-top:8px">Download links as CSV</button>
       </div>
@@ -90,7 +109,7 @@
       <p class="muted small">Portfolios are private to each participant — the admin sees only whether one is uploaded and how many holdings it has.</p>
     </section>
 
-    <section class="card">
+    <section class="card master-only">
       <h2>Daily WhatsApp notifications (AiSensy)</h2>
       <div id="notify-status" class="small" style="margin-bottom:10px"></div>
       <div class="row">
@@ -115,6 +134,29 @@
       <details><summary>Delivery log &amp; job runs</summary>
         <div class="table-scroll"><table id="n-log"></table></div>
         <div class="table-scroll" style="margin-top:10px"><table id="n-jobs"></table></div>
+      </details>
+    </section>
+
+    <section class="card master-only">
+      <h2>Admins</h2>
+      <form id="add-admin" class="row">
+        <div><label for="ad-email">Email</label><input id="ad-email" type="email" required></div>
+        <div><label for="ad-name">Name</label><input id="ad-name" maxlength="80"></div>
+        <button class="primary">Add sub-admin</button>
+      </form>
+      <p class="muted small" style="margin:6px 0 0">Sub-admins manage participants and strategies. Only the master admin changes the AI model, budget, WhatsApp settings and admins. Sub-admins sign in with Google (same email) or set a password via their invite link.</p>
+      <div id="admin-invite" class="notice hidden" style="margin-top:10px"></div>
+      <div class="table-scroll" style="margin-top:10px"><table id="admins"></table></div>
+    </section>
+
+    <section class="card" id="my-password-card">
+      <details><summary>Change my password</summary>
+        <form id="my-pw" class="row" style="margin-top:8px">
+          <div><label for="my-pw-cur">Current password</label><input id="my-pw-cur" type="password" autocomplete="current-password"></div>
+          <div><label for="my-pw-new">New password (12+ characters)</label><input id="my-pw-new" type="password" minlength="12" autocomplete="new-password" required></div>
+          <button class="primary">Update</button>
+        </form>
+        <p class="small" id="my-pw-msg"></p>
       </details>
     </section>
 

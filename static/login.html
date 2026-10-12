@@ -11,6 +11,10 @@
 <main class="wrap narrow">
   <section class="card">
     <h2>Sign in</h2>
+    <div id="google-box" class="hidden">
+      <a class="google-btn" href="/auth/google/start">Sign in with Google</a>
+      <p class="or">or with your mobile number</p>
+    </div>
     <form id="login-form">
       <label for="phone">Mobile number</label>
       <input id="phone" type="tel" autocomplete="username" required placeholder="98XXXXXXXX" class="block">
@@ -19,7 +23,7 @@
       <div id="error" class="error hidden" style="margin-top:12px"></div>
       <button class="primary block" style="margin-top:16px">Sign in</button>
     </form>
-    <p class="muted small">New here? Use the invite link the admin sent you. Forgot your password? Ask the admin for a new invite link.</p>
+    <p class="muted small">Use "Sign in with Google" if the admin registered your Gmail address. Otherwise use the invite link the admin sent you; forgot your password? Ask the admin for a new invite link.</p>
   </section>
 </main>
 <script src="/static/common.js"></script>

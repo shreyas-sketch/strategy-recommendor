@@ -6,11 +6,15 @@ const EST_IN = 3000, EST_OUT = 1500;
 let token = "";
 let selectedModel = null;
 
+let me = null;
+// Admins normally use a session cookie; the legacy ADMIN_TOKEN header is only sent if one was entered.
+function authHeaders(extra = {}) { return { "X-Requested-With": "fetch", ...(token ? { "X-Admin-Token": token } : {}), ...extra }; }
+
 function store(k, v) { try { v === undefined ? sessionStorage.removeItem(k) : sessionStorage.setItem(k, v); } catch {} }
 function load(k) { try { return sessionStorage.getItem(k) || ""; } catch { return ""; } }
 
 async function api(path, opts = {}) {
-  const res = await fetch(path, { ...opts, headers: { "Content-Type": "application/json", "X-Requested-With": "fetch", "X-Admin-Token": token, ...(opts.headers || {}) } });
+  const res = await fetch(path, { ...opts, credentials: "same-origin", headers: authHeaders({ "Content-Type": "application/json", ...(opts.headers || {}) }) });
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
     const d = body.detail;
@@ -23,8 +27,14 @@ function clearError() { $("error").classList.add("hidden"); }
 
 async function refresh() {
   clearError();
+  me = await api("/api/admin/me");
+  document.body.dataset.role = me.role;
+  $("who-admin").textContent = `${me.name || me.email} · ${me.role === "master" ? "master admin" : "admin"}`;
+  $("admin-logout").classList.toggle("hidden", me.via !== "session");
+  $("my-password-card").classList.toggle("hidden", me.via !== "session");
   const [cfg, usage] = await Promise.all([api("/api/admin/settings"), api("/api/admin/usage"), loadStrategies(),
-                                          loadParticipants(), loadNotifications(), loadExpiries()]);
+                                          loadParticipants(), loadNotifications(), loadExpiries(),
+                                          me.role === "master" ? loadAdmins() : null]);
   const s = cfg.settings;
   selectedModel = s.active_model;
 
@@ -101,13 +111,14 @@ let lastInvites = [];
 function showInvites(list) {
   lastInvites = list;
   $("invites").classList.toggle("hidden", !list.length);
-  $("invite-table").innerHTML = `<tr><th>Name</th><th>Phone</th><th>Invite link</th></tr>` + list.map((x) =>
-    `<tr><td>${esc(x.name)}</td><td>${esc(x.phone)}</td><td><div class="invite-box">${esc(x.invite_url)}</div></td></tr>`).join("");
+  $("invite-table").innerHTML = `<tr><th>Name</th><th>Sign-in</th><th>Invite link</th></tr>` + list.map((x) =>
+    `<tr><td>${esc(x.name)}</td><td class="small">${x.email ? `Google: ${esc(x.email)}<br>` : ""}${x.phone ? `Phone: ${esc(x.phone)}` : ""}</td>
+      <td>${x.invite_url ? `<div class="invite-box">${esc(x.invite_url)}</div>` : '<span class="muted small">No link needed — "Sign in with Google"</span>'}</td></tr>`).join("");
 }
 $("invite-csv").onclick = () => {
   // Quote, and neutralise spreadsheet formulas (=, +, -, @) so the file is safe to open in Excel.
   const q = (v) => { let t = String(v); if (/^[=+\-@]/.test(t)) t = "'" + t; return `"${t.replace(/"/g, '""')}"`; };
-  const csv = "name,phone,invite_url\n" + lastInvites.map((x) => [x.name, x.phone, x.invite_url].map(q).join(",")).join("\n");
+  const csv = "name,email,phone,invite_url\n" + lastInvites.map((x) => [x.name, x.email || "", x.phone || "", x.invite_url || "Sign in with Google"].map(q).join(",")).join("\n");
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
   a.download = "invite_links.csv"; a.click(); URL.revokeObjectURL(a.href);
@@ -115,22 +126,22 @@ $("invite-csv").onclick = () => {
 
 async function loadParticipants() {
   const { participants } = await api("/api/admin/participants");
-  $("participants").innerHTML = `<tr><th>Name</th><th>Phone</th><th>Status</th><th>Profile</th><th>Portfolio</th><th>WhatsApp</th><th>Last login</th><th></th></tr>` +
+  $("participants").innerHTML = `<tr><th>Name</th><th>Sign-in</th><th>Status</th><th>Profile</th><th>Portfolio</th><th>WhatsApp</th><th>Last login</th><th></th></tr>` +
     (participants.length ? participants.map((p) => `<tr>
-      <td>${esc(p.name)}</td><td>${esc(p.phone)}</td>
-      <td>${!p.active ? '<span class="pill avoid">disabled</span>' : p.activated ? '<span class="pill recommended">active</span>' : '<span class="pill conditional">invited</span>'}</td>
+      <td>${esc(p.name)}</td><td class="small">${p.email ? esc(p.email) : ""}${p.email && p.phone ? "<br>" : ""}${p.phone ? esc(p.phone) : ""}</td>
+      <td>${!p.active ? '<span class="pill avoid">disabled</span>' : (p.activated || p.last_login) ? '<span class="pill recommended">active</span>' : '<span class="pill conditional">invited</span>'}</td>
       <td>${p.has_profile ? "set" : '<span class="muted">—</span>'}</td>
       <td>${p.holdings_count ? `${p.holdings_count} holdings` : '<span class="muted">—</span>'}</td>
       <td>${p.notify_opt_in ? "opted in" : '<span class="muted">off</span>'}${p.last_notification ? ` <span class="muted small">(${esc(p.last_notification)})</span>` : ""}</td>
       <td class="small">${esc(p.last_login || "—")}</td>
-      <td class="actions"><button data-invite="${p.id}">New invite</button> <button data-toggle="${p.id}" data-active="${p.active}">${p.active ? "Disable" : "Enable"}</button> <button class="danger" data-remove="${p.id}" data-name="${esc(p.name)}">Delete</button></td>
+      <td class="actions">${p.phone ? `<button data-invite="${p.id}">New invite</button> ` : ""}<button data-toggle="${p.id}" data-active="${p.active}">${p.active ? "Disable" : "Enable"}</button> <button class="danger" data-remove="${p.id}" data-name="${esc(p.name)}">Delete</button></td>
     </tr>`).join("") : `<tr><td colspan="8" class="muted">No participants yet.</td></tr>`);
 }
 
 $("add-participant").addEventListener("submit", async (e) => {
   e.preventDefault(); clearError();
   try {
-    const r = await api("/api/admin/participants", { method: "POST", body: JSON.stringify({ name: $("p-name").value, phone: $("p-phone").value }) });
+    const r = await api("/api/admin/participants", { method: "POST", body: JSON.stringify({ name: $("p-name").value, phone: $("p-phone").value || null, email: $("p-email").value || null }) });
     showInvites([r]); e.target.reset(); await loadParticipants();
   } catch (err) { showError(err); }
 });
@@ -149,7 +160,7 @@ $("participants").addEventListener("click", async (e) => {
     if (d.invite && confirm("Create a new invite link? Their current password stops working.")) {
       const r = await api(`/api/admin/participants/${d.invite}/invite`, { method: "POST" });
       const row = e.target.closest("tr").children;
-      showInvites([{ name: row[0].textContent, phone: row[1].textContent, invite_url: r.invite_url }]);
+      showInvites([{ name: row[0].textContent, phone: row[1].textContent, email: "", invite_url: r.invite_url }]);
     } else if (d.toggle) {
       await api(`/api/admin/participants/${d.toggle}`, { method: "PATCH", body: JSON.stringify({ active: d.active !== "1" }) });
     } else if (d.remove && confirm(`Delete ${d.name} and all their data (portfolio, history)? This cannot be undone.`)) {
@@ -277,7 +288,7 @@ $("tt-files").onchange = async (e) => {
   for (const f of e.target.files) {
     const fd = new FormData(); fd.append("file", f);
     try {
-      const res = await fetch("/api/admin/strategies/import", { method: "POST", body: fd, headers: { "X-Requested-With": "fetch", "X-Admin-Token": token } });
+      const res = await fetch("/api/admin/strategies/import", { method: "POST", body: fd, credentials: "same-origin", headers: authHeaders() });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(`${f.name}: ${body.detail || res.statusText}`);
       drafts.push(body);
@@ -342,11 +353,76 @@ $("test").onclick = async (e) => {
   } catch (err) { $("out").textContent = err.message; }
   finally { e.target.disabled = false; }
 };
+// ---- admins (master only) ------------------------------------------------
+async function loadAdmins() {
+  const { admins } = await api("/api/admin/admins");
+  $("admins").innerHTML = `<tr><th>Email</th><th>Name</th><th>Role</th><th>Status</th><th>Last login</th><th></th></tr>` +
+    admins.map((a) => `<tr><td>${esc(a.email)}</td><td>${esc(a.name)}</td><td>${a.role === "master" ? "master" : "sub-admin"}</td>
+      <td>${!a.active ? '<span class="pill avoid">disabled</span>' : a.has_password || a.last_login ? '<span class="pill recommended">active</span>' : '<span class="pill conditional">invited</span>'}</td>
+      <td class="small">${esc(a.last_login || "—")}</td>
+      <td class="actions">${a.role === "master" ? "" : `<button data-ainvite="${a.id}">New invite</button> <button data-atoggle="${a.id}" data-active="${a.active}">${a.active ? "Disable" : "Enable"}</button> <button class="danger" data-aremove="${a.id}" data-email="${esc(a.email)}">Remove</button>`}</td></tr>`).join("");
+}
+function showAdminInvite(email, url) {
+  $("admin-invite").classList.remove("hidden");
+  $("admin-invite").innerHTML = `Send this to <b>${esc(email)}</b> privately (works once, 7 days) to set a password — or they can just use "Sign in with Google" with that email:<div class="invite-box" style="margin-top:6px">${esc(url)}</div>`;
+}
+$("add-admin").addEventListener("submit", async (e) => {
+  e.preventDefault(); clearError();
+  try {
+    const r = await api("/api/admin/admins", { method: "POST", body: JSON.stringify({ email: $("ad-email").value, name: $("ad-name").value }) });
+    showAdminInvite(r.email, r.invite_url); e.target.reset(); await loadAdmins();
+  } catch (err) { showError(err); }
+});
+$("admins").addEventListener("click", async (e) => {
+  const d = e.target.dataset;
+  try {
+    if (d.ainvite && confirm("Create a new invite link? Their current password stops working.")) {
+      const r = await api(`/api/admin/admins/${d.ainvite}/invite`, { method: "POST" });
+      showAdminInvite(e.target.closest("tr").children[0].textContent, r.invite_url);
+    } else if (d.atoggle) {
+      await api(`/api/admin/admins/${d.atoggle}`, { method: "PATCH", body: JSON.stringify({ active: d.active !== "1" }) });
+    } else if (d.aremove && confirm(`Remove admin ${d.email}?`)) {
+      await api(`/api/admin/admins/${d.aremove}`, { method: "DELETE" });
+    } else return;
+    await loadAdmins();
+  } catch (err) { showError(err); }
+});
+
+$("my-pw").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  try {
+    await api("/api/admin/me/password", { method: "POST", body: JSON.stringify({ current_password: $("my-pw-cur").value, new_password: $("my-pw-new").value }) });
+    $("my-pw-msg").textContent = "Password updated. Other sessions were signed out."; e.target.reset();
+  } catch (err) { $("my-pw-msg").textContent = err.message; }
+});
+
+// ---- sign in ---------------------------------------------------------------
+function showPanel() { $("login").classList.add("hidden"); $("panel").classList.remove("hidden"); }
+
+$("admin-login-form").addEventListener("submit", async (e) => {
+  e.preventDefault(); clearError(); token = "";
+  try {
+    await api("/api/admin/auth/login", { method: "POST", body: JSON.stringify({ email: $("a-email").value, password: $("a-password").value }) });
+    await refresh(); showPanel();
+  } catch (err) { showError(err); }
+});
 $("signin").onclick = async () => {
   token = $("token").value.trim();
-  try { await refresh(); store("sr_admin", token); $("login").classList.add("hidden"); $("panel").classList.remove("hidden"); }
-  catch (e) { showError(e); }
+  try { await refresh(); store("sr_admin", token); showPanel(); }
+  catch (e) { token = ""; showError(e); }
+};
+$("admin-logout").onclick = async () => {
+  await api("/api/admin/auth/logout", { method: "POST" }).catch(() => {});
+  store("sr_admin"); location.href = "/admin";
 };
 
-token = load("sr_admin");
-if (token) refresh().then(() => { $("login").classList.add("hidden"); $("panel").classList.remove("hidden"); }).catch(() => store("sr_admin"));
+(async () => {
+  const errors = { not_admin: "That Google account is not an admin here.", google_failed: "Google sign-in failed — please try again.",
+                   google_not_configured: "Google sign-in is not set up on the server yet." };
+  const err = new URLSearchParams(location.search).get("error");
+  if (err) { showError(errors[err] || "Sign-in failed."); history.replaceState(null, "", "/admin"); }
+  fetch("/api/auth/config").then((r) => r.json()).then((c) => $("admin-google").classList.toggle("hidden", !c.google)).catch(() => {});
+  token = load("sr_admin");
+  try { await refresh(); showPanel(); }           // existing session cookie (or stored token)
+  catch { token = ""; store("sr_admin"); if (!err) clearError(); }
+})();

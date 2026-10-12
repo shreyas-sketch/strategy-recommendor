@@ -12,11 +12,11 @@ import os
 import re
 
 from fastapi import BackgroundTasks, Body, Depends, FastAPI, File, Header, HTTPException, Request, Response, UploadFile
-from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ValidationError
 
-from . import auth
+from . import auth, oauth
 from .config import IS_PRODUCTION, ROOT, AdminSettings, Horizon, Settings, Strategy
 from .data.base import ProviderError
 from .notify import AISensyClient, DailyJobs, scheduler_loop
@@ -79,12 +79,30 @@ class NotifyPref(BaseModel):
 
 class NewParticipant(BaseModel):
     name: str
-    phone: str
+    phone: str | None = None
+    email: str | None = None
 
 
 class ParticipantPatch(BaseModel):
     active: bool | None = None
     name: str | None = None
+    phone: str | None = None
+    email: str | None = None
+
+
+class AdminLogin(BaseModel):
+    email: str
+    password: str
+
+
+class NewAdmin(BaseModel):
+    email: str
+    name: str = ""
+
+
+ADMIN_COOKIE = "sr_admin"
+ADMIN_SESSION_TTL_S = 12 * 3600
+ADMIN_MIN_PASSWORD = 12
 
 
 def check_production_config() -> None:
@@ -92,10 +110,10 @@ def check_production_config() -> None:
     if not IS_PRODUCTION:
         return
     token = _admin_token()
-    if not token:
-        raise RuntimeError("ADMIN_TOKEN is not set. Add it under the service's Variables in Railway "
-                           "(a random string of at least 24 characters) and redeploy.")
-    if len(token) < 24:
+    if not token and not os.environ.get("MASTER_ADMIN_EMAIL"):
+        raise RuntimeError("No admin login configured. In Railway Variables set MASTER_ADMIN_EMAIL (+ MASTER_ADMIN_PASSWORD) "
+                           "for the master admin account, and/or ADMIN_TOKEN (a random string of 24+ characters).")
+    if token and len(token) < 24:
         raise RuntimeError(f"ADMIN_TOKEN is only {len(token)} characters; it must be at least 24. Generate one with: "
                            "python3 -c \"import secrets; print(secrets.token_urlsafe(32))\"")
     if os.environ.get("COOKIE_SECURE") == "0":
@@ -111,6 +129,7 @@ def create_app(settings: Settings | None = None, service: RecommendationService 
     settings = settings or Settings()
     service = service or RecommendationService(settings, Store(settings.data_dir / "app.db"))
     store = service.store
+    bootstrap_master_admin(store)
     if service.calendar is None and os.environ.get("EXPIRY_CALENDAR", "1") != "0":
         service.calendar = ExpiryCalendar(settings)
     advisor = jobs.advisor if jobs else PortfolioAdvisor(service)
@@ -155,14 +174,36 @@ def create_app(settings: Settings | None = None, service: RecommendationService 
         return request.client.host if request.client else "?"
 
     # ---- auth dependencies ------------------------------------------------
-    def require_admin(request: Request, x_admin_token: str = Header(default="")) -> None:
-        if not _admin_token():
-            raise HTTPException(503, "ADMIN_TOKEN is not configured on the server")
-        if _is_admin(x_admin_token):
-            return
-        if not admin_limiter.hit(client_ip(request)):
+    def admin_principal(request: Request) -> dict | None:
+        """The signed-in admin (session cookie), or the master-level ADMIN_TOKEN header; None otherwise."""
+        token = request.cookies.get(ADMIN_COOKIE)
+        if token:
+            row = store.admin_session(token)
+            if row:
+                return {"id": row["id"], "email": row["email"], "name": row["name"], "role": row["role"], "via": "session"}
+        if _is_admin(request.headers.get("x-admin-token", "")):
+            return {"id": None, "email": "ADMIN_TOKEN", "name": "Admin token", "role": "master", "via": "token"}
+        return None
+
+    def require_admin(request: Request) -> dict:
+        principal = admin_principal(request)
+        if principal:
+            return principal
+        if request.headers.get("x-admin-token") and not admin_limiter.hit(client_ip(request)):
             raise HTTPException(429, "Too many attempts. Try again later.")
-        raise HTTPException(401, "invalid admin token")
+        raise HTTPException(401, "Admin sign-in required")
+
+    def require_master(principal: dict = Depends(require_admin)) -> dict:
+        if principal["role"] != "master":
+            raise HTTPException(403, "Only the master admin can do this")
+        return principal
+
+    def set_admin_session(response: Response, admin_id: int) -> None:
+        token = auth.new_token()
+        store.create_admin_session(admin_id, token, ADMIN_SESSION_TTL_S)
+        store.update_admin(admin_id, last_login=today_ist())
+        response.set_cookie(ADMIN_COOKIE, token, max_age=ADMIN_SESSION_TTL_S, httponly=True,
+                            secure=auth.cookie_secure(), samesite="lax", path="/")
 
     def current_user(request: Request) -> dict:
         token = request.cookies.get(auth.SESSION_COOKIE)
@@ -243,7 +284,8 @@ def create_app(settings: Settings | None = None, service: RecommendationService 
     @app.get("/api/me")
     def me(user: dict = Depends(current_user)):
         portfolio = store.get_portfolio(user["id"])
-        return {"name": user["name"], "phone": auth.mask_phone(user["phone"]),
+        return {"name": user["name"], "phone": auth.mask_phone(user["phone"]) if user["phone"] else None,
+                "email": user["email"],
                 "notify_opt_in": bool(user["notify_opt_in"]),
                 "notifications_live": settings.admin.notify_enabled, "notify_time": settings.admin.notify_time,
                 "has_portfolio": bool(portfolio), "profile": store.get_profile(user["id"])}
@@ -323,7 +365,7 @@ def create_app(settings: Settings | None = None, service: RecommendationService 
 
     @app.post("/api/recommend")
     def recommend(req: RecommendRequest, request: Request, x_admin_token: str = Header(default="")):
-        is_admin = _is_admin(x_admin_token)
+        is_admin = admin_principal(request) is not None
         user = None if is_admin else current_user(request)
         if not SYMBOL_RE.match(req.instrument):
             raise HTTPException(422, "instrument must be a plain symbol like NIFTY50 or RELIANCE")
@@ -348,6 +390,161 @@ def create_app(settings: Settings | None = None, service: RecommendationService 
         except ValueError as exc:
             raise HTTPException(422, str(exc))
 
+    # ---- admin accounts & sign-in -----------------------------------------
+    @app.post("/api/admin/auth/login")
+    def admin_login(req: AdminLogin, request: Request, response: Response):
+        ip = client_ip(request)
+        email = (req.email or "").strip().lower()
+        if not admin_limiter.hit(f"ip:{ip}") or not admin_limiter.hit(f"email:{email}"):
+            raise HTTPException(429, "Too many attempts. Try again in 15 minutes.")
+        row = store.get_admin_by_email(email)
+        ok = auth.verify_password(req.password, row["password_hash"] if row else None)
+        if not (ok and row and row["active"]):
+            raise HTTPException(401, "Wrong email or password")
+        admin_limiter.reset(f"email:{email}")
+        set_admin_session(response, row["id"])
+        return {"ok": True}
+
+    @app.post("/api/admin/auth/logout")
+    def admin_logout(request: Request, response: Response):
+        token = request.cookies.get(ADMIN_COOKIE)
+        if token:
+            store.delete_admin_session(token)
+        response.delete_cookie(ADMIN_COOKIE, path="/")
+        return {"ok": True}
+
+    @app.post("/api/admin/auth/accept-invite")
+    def admin_accept_invite(req: InviteAccept, request: Request, response: Response):
+        if not admin_limiter.hit(f"invite:{client_ip(request)}"):
+            raise HTTPException(429, "Too many attempts. Try again later.")
+        if len(req.password) < ADMIN_MIN_PASSWORD:
+            raise HTTPException(422, f"Admin passwords must be at least {ADMIN_MIN_PASSWORD} characters")
+        admin_id = store.consume_admin_invite(req.token)
+        if not admin_id:
+            raise HTTPException(400, "This invite link is invalid or has expired. Ask the master admin for a new one.")
+        store.update_admin(admin_id, password_hash=auth.hash_password(req.password))
+        store.delete_admin_sessions(admin_id)
+        set_admin_session(response, admin_id)
+        return {"ok": True}
+
+    @app.get("/api/admin/me")
+    def admin_me(principal: dict = Depends(require_admin)):
+        return principal
+
+    @app.post("/api/admin/me/password")
+    def admin_change_password(req: PasswordChange, response: Response, principal: dict = Depends(require_admin)):
+        if principal["via"] != "session":
+            raise HTTPException(409, "Sign in with your admin account (not the admin token) to change a password")
+        row = store.get_admin(principal["id"])
+        if row["password_hash"] and not auth.verify_password(req.current_password, row["password_hash"]):
+            raise HTTPException(401, "Current password is wrong")
+        if len(req.new_password) < ADMIN_MIN_PASSWORD:
+            raise HTTPException(422, f"Admin passwords must be at least {ADMIN_MIN_PASSWORD} characters")
+        store.update_admin(row["id"], password_hash=auth.hash_password(req.new_password))
+        store.delete_admin_sessions(row["id"])
+        set_admin_session(response, row["id"])
+        return {"ok": True}
+
+    def issue_admin_invite(request: Request, admin_id: int) -> str:
+        token = auth.new_token()
+        store.create_admin_invite(admin_id, token, auth.INVITE_TTL_S)
+        return f"{public_base(request)}/admin/invite#{token}"
+
+    @app.get("/api/admin/admins", dependencies=[Depends(require_master)])
+    def list_admins():
+        return {"admins": store.list_admins(), "google": oauth.configured()}
+
+    @app.post("/api/admin/admins", dependencies=[Depends(require_master)], status_code=201)
+    def add_admin(a: NewAdmin, request: Request):
+        try:
+            email = oauth.normalize_email(a.email)
+            admin_id = store.create_admin(email, "admin", name=a.name.strip()[:80])
+        except ValueError as exc:
+            raise HTTPException(409 if "exists" in str(exc) else 422, str(exc))
+        return {"id": admin_id, "email": email, "invite_url": issue_admin_invite(request, admin_id)}
+
+    def _sub_admin(admin_id: int) -> dict:
+        row = store.get_admin(admin_id)
+        if not row:
+            raise HTTPException(404, "Unknown admin")
+        if row["role"] == "master":
+            raise HTTPException(409, "The master admin cannot be changed here")
+        return row
+
+    @app.post("/api/admin/admins/{admin_id}/invite", dependencies=[Depends(require_master)])
+    def reinvite_admin(admin_id: int, request: Request):
+        _sub_admin(admin_id)
+        store.update_admin(admin_id, password_hash=None)
+        store.delete_admin_sessions(admin_id)
+        return {"invite_url": issue_admin_invite(request, admin_id)}
+
+    @app.patch("/api/admin/admins/{admin_id}", dependencies=[Depends(require_master)])
+    def patch_admin(admin_id: int, active: bool = Body(..., embed=True)):
+        _sub_admin(admin_id)
+        store.update_admin(admin_id, active=int(active))
+        if not active:
+            store.delete_admin_sessions(admin_id)
+        return {"ok": True}
+
+    @app.delete("/api/admin/admins/{admin_id}", dependencies=[Depends(require_master)])
+    def delete_admin(admin_id: int):
+        _sub_admin(admin_id)
+        store.delete_admin(admin_id)
+        return {"deleted": admin_id}
+
+    # ---- Google sign-in (pre-approved emails only) -----------------------
+    google_limiter = auth.RateLimiter(30, 15 * 60)
+
+    @app.get("/api/auth/config")
+    def auth_config():
+        return {"google": oauth.configured()}
+
+    @app.get("/auth/google/start", include_in_schema=False)
+    def google_start(request: Request, role: str = "participant"):
+        role = "admin" if role == "admin" else "participant"
+        back = "/admin" if role == "admin" else "/login"
+        if not oauth.configured():
+            return RedirectResponse(f"{back}?error=google_not_configured", status_code=303)
+        url, cookie = oauth.start(f"{public_base(request)}/auth/google/callback", role)
+        resp = RedirectResponse(url, status_code=303)
+        resp.set_cookie(oauth.STATE_COOKIE, cookie, max_age=oauth.STATE_TTL_S, httponly=True,
+                        secure=auth.cookie_secure(), samesite="lax", path="/auth/google")
+        return resp
+
+    @app.get("/auth/google/callback", include_in_schema=False)
+    def google_callback(request: Request, code: str = "", state: str = "", error: str = ""):
+        cookie = request.cookies.get(oauth.STATE_COOKIE)
+        role = "participant"
+        try:
+            if not google_limiter.hit(client_ip(request)):
+                raise oauth.OAuthError("too many sign-in attempts — try again later")
+            if error:
+                raise oauth.OAuthError("sign-in was cancelled")
+            email, _name, role = oauth.finish(code, state, cookie, f"{public_base(request)}/auth/google/callback")
+        except oauth.OAuthError as exc:
+            log.info("google sign-in refused: %s", exc)
+            target = "/admin" if (cookie and '"role":"admin"' in _peek(cookie)) else "/login"
+            resp = RedirectResponse(f"{target}?error=google_failed", status_code=303)
+            resp.delete_cookie(oauth.STATE_COOKIE, path="/auth/google")
+            return resp
+        if role == "admin":
+            row = store.get_admin_by_email(email)
+            if row and row["active"]:
+                resp = RedirectResponse("/admin", status_code=303)
+                set_admin_session(resp, row["id"])
+            else:
+                resp = RedirectResponse("/admin?error=not_admin", status_code=303)
+        else:
+            user = store.get_user_by_email(email)
+            if user and user["active"]:
+                resp = RedirectResponse("/", status_code=303)
+                store.update_user(user["id"], last_login=today_ist())
+                set_session(resp, user["id"])
+            else:
+                resp = RedirectResponse("/login?error=not_registered", status_code=303)
+        resp.delete_cookie(oauth.STATE_COOKIE, path="/auth/google")
+        return resp
+
     # ---- admin: settings & usage ----------------------------------------
     @app.get("/api/admin/settings", dependencies=[Depends(require_admin)])
     def get_settings():
@@ -359,7 +556,7 @@ def create_app(settings: Settings | None = None, service: RecommendationService 
             "strategies_loaded": len(settings.strategies),
         }
 
-    @app.put("/api/admin/settings", dependencies=[Depends(require_admin)])
+    @app.put("/api/admin/settings", dependencies=[Depends(require_master)])
     def put_settings(changes: dict = Body(...)):
         changes = {k: v for k, v in changes.items() if k in AdminSettings.model_fields}
         try:
@@ -460,18 +657,23 @@ def create_app(settings: Settings | None = None, service: RecommendationService 
     def list_participants():
         return {"participants": store.list_users()}
 
-    def _create_participant(request: Request, name: str, phone: str) -> dict:
-        name = re.sub(r"\s+", " ", name).strip()[:80]
+    def _create_participant(request: Request, name: str, phone: str | None, email: str | None) -> dict:
+        name = re.sub(r"\s+", " ", name or "").strip()[:80]
         if not name:
             raise ValueError("Name is required")
-        phone = auth.normalize_phone(phone)
-        user_id = store.create_user(name, phone)
-        return {"id": user_id, "name": name, "phone": phone, "invite_url": issue_invite(request, user_id)}
+        phone = auth.normalize_phone(phone) if (phone or "").strip() else None
+        email = oauth.normalize_email(email) if (email or "").strip() else None
+        if not (phone or email):
+            raise ValueError("Give a WhatsApp number, a Google email, or both")
+        user_id = store.create_user(name, phone, email)
+        # Phone users get a password invite link; email users just "Sign in with Google".
+        return {"id": user_id, "name": name, "phone": phone, "email": email,
+                "invite_url": issue_invite(request, user_id) if phone else None}
 
     @app.post("/api/admin/participants", dependencies=[Depends(require_admin)], status_code=201)
     def add_participant(p: NewParticipant, request: Request):
         try:
-            return _create_participant(request, p.name, p.phone)
+            return _create_participant(request, p.name, p.phone, p.email)
         except ValueError as exc:
             raise HTTPException(409 if "exists" in str(exc) else 422, str(exc))
 
@@ -479,23 +681,27 @@ def create_app(settings: Settings | None = None, service: RecommendationService 
     def import_participants(request: Request, csv_text: str = Body(..., embed=True)):
         created, errors = [], []
         reader = csv.DictReader(io.StringIO(csv_text.strip()))
-        if not reader.fieldnames or not {"name", "phone"} <= {f.strip().lower() for f in reader.fieldnames}:
-            raise HTTPException(422, "CSV needs a header row with 'name' and 'phone' columns")
+        fields = {f.strip().lower() for f in (reader.fieldnames or [])}
+        if "name" not in fields or not ({"phone", "email"} & fields):
+            raise HTTPException(422, "CSV needs a header row with 'name' and 'phone' and/or 'email' columns")
         for line, row in enumerate(reader, start=2):
             if line > 1001:
                 errors.append({"line": line, "error": "Stopped: max 1000 participants per import"})
                 break
             row = {k.strip().lower(): (v or "") for k, v in row.items() if k}
             try:
-                created.append(_create_participant(request, row["name"], row["phone"]))
+                created.append(_create_participant(request, row.get("name", ""), row.get("phone"), row.get("email")))
             except ValueError as exc:
                 errors.append({"line": line, "error": str(exc)})
         return {"created": created, "errors": errors}
 
     @app.post("/api/admin/participants/{user_id}/invite", dependencies=[Depends(require_admin)])
     def reinvite(user_id: int, request: Request):
-        if not store.get_user(user_id):
+        user = store.get_user(user_id)
+        if not user:
             raise HTTPException(404, "Unknown participant")
+        if not user["phone"]:
+            raise HTTPException(409, "This participant signs in with Google. Add a phone number to give them a password login.")
         store.update_user(user_id, password_hash=None)
         store.delete_user_sessions(user_id)
         return {"invite_url": issue_invite(request, user_id)}
@@ -511,7 +717,17 @@ def create_app(settings: Settings | None = None, service: RecommendationService 
                 store.delete_user_sessions(user_id)
         if patch.name:
             fields["name"] = patch.name.strip()[:80]
-        store.update_user(user_id, **fields)
+        try:
+            if patch.email is not None:
+                fields["email"] = oauth.normalize_email(patch.email) if patch.email.strip() else None
+            if patch.phone is not None:
+                fields["phone"] = auth.normalize_phone(patch.phone) if patch.phone.strip() else None
+            current = store.get_user(user_id)
+            if not ((fields.get("email", current["email"])) or (fields.get("phone", current["phone"]))):
+                raise ValueError("A participant needs a phone number or an email")
+            store.update_user(user_id, **fields)
+        except ValueError as exc:
+            raise HTTPException(409 if "already" in str(exc) else 422, str(exc))
         return {"ok": True}
 
     @app.delete("/api/admin/participants/{user_id}", dependencies=[Depends(require_admin)])
@@ -546,7 +762,7 @@ def create_app(settings: Settings | None = None, service: RecommendationService 
                 "campaign": a.aisensy_campaign, "opted_in": len(store.opted_in_users()),
                 "recent": store.recent_notifications(), "jobs": store.recent_jobs()}
 
-    @app.post("/api/admin/notifications/test", dependencies=[Depends(require_admin)])
+    @app.post("/api/admin/notifications/test", dependencies=[Depends(require_master)])
     def notification_test(phone: str = Body(..., embed=True)):
         try:
             phone = auth.normalize_phone(phone)
@@ -555,7 +771,7 @@ def create_app(settings: Settings | None = None, service: RecommendationService 
         ok, detail = jobs.send_test(phone)
         return {"ok": ok, "detail": detail}
 
-    @app.post("/api/admin/jobs/{kind}/run", dependencies=[Depends(require_admin)], status_code=202)
+    @app.post("/api/admin/jobs/{kind}/run", dependencies=[Depends(require_master)], status_code=202)
     def run_job(kind: str, background: BackgroundTasks):
         if kind not in ("prepare", "send"):
             raise HTTPException(404, "Unknown job")
@@ -563,7 +779,8 @@ def create_app(settings: Settings | None = None, service: RecommendationService 
         return {"started": kind}
 
     # ---- web UI ---------------------------------------------------------
-    pages = {"/": "index.html", "/login": "login.html", "/invite": "invite.html", "/admin": "admin.html"}
+    pages = {"/": "index.html", "/login": "login.html", "/invite": "invite.html", "/admin": "admin.html",
+             "/admin/invite": "invite.html"}
     for route, page in pages.items():
         app.add_api_route(route, _page(page), include_in_schema=False)
     app.mount("/static", StaticFiles(directory=STATIC), name="static")
@@ -574,6 +791,42 @@ def _page(name: str):
     def handler():
         return FileResponse(STATIC / name)
     return handler
+
+
+def bootstrap_master_admin(store: Store) -> None:
+    """Create the master admin from MASTER_ADMIN_EMAIL / MASTER_ADMIN_PASSWORD on first start.
+
+    The password is only applied when the master has none yet, or when MASTER_ADMIN_PASSWORD_RESET=1
+    (use that once to recover a forgotten password, then remove it).
+    """
+    email = os.environ.get("MASTER_ADMIN_EMAIL", "").strip().lower()
+    password = os.environ.get("MASTER_ADMIN_PASSWORD", "")
+    master = store.master_admin()
+    if password and len(password) < ADMIN_MIN_PASSWORD:
+        raise RuntimeError(f"MASTER_ADMIN_PASSWORD must be at least {ADMIN_MIN_PASSWORD} characters")
+    if master is None:
+        if not email:
+            return
+        store.create_admin(oauth.normalize_email(email), "master", name="Master admin",
+                           password_hash=auth.hash_password(password) if password else None)
+        log.info("master admin account created")
+        return
+    if email and email != master["email"]:
+        log.warning("MASTER_ADMIN_EMAIL differs from the existing master admin; the existing account is kept")
+    if password and (not master["password_hash"] or os.environ.get("MASTER_ADMIN_PASSWORD_RESET") == "1"):
+        store.update_admin(master["id"], password_hash=auth.hash_password(password))
+        store.delete_admin_sessions(master["id"])
+        log.info("master admin password set from MASTER_ADMIN_PASSWORD")
+
+
+def _peek(cookie: str) -> str:
+    """Decode (without trusting) the state cookie body, only to pick the error page."""
+    import base64
+    try:
+        body = cookie.split(".", 1)[0]
+        return base64.urlsafe_b64decode(body + "=" * (-len(body) % 4)).decode()
+    except (ValueError, UnicodeDecodeError):
+        return ""
 
 
 def _admin_token() -> str:

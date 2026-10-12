@@ -28,12 +28,34 @@ CREATE TABLE IF NOT EXISTS rec_cache (key TEXT PRIMARY KEY, created REAL NOT NUL
 CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
-    phone TEXT NOT NULL UNIQUE,
+    phone TEXT UNIQUE,                 -- WhatsApp / phone+password login (optional)
+    email TEXT UNIQUE,                 -- pre-approved Google sign-in (optional)
     password_hash TEXT,
     active INTEGER NOT NULL DEFAULT 1,
     notify_opt_in INTEGER NOT NULL DEFAULT 0,
     created TEXT NOT NULL,
+    last_login TEXT,
+    profile TEXT
+);
+CREATE TABLE IF NOT EXISTS admins (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    email TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL DEFAULT '',
+    password_hash TEXT,
+    role TEXT NOT NULL CHECK (role IN ('master', 'admin')),
+    active INTEGER NOT NULL DEFAULT 1,
+    created TEXT NOT NULL,
     last_login TEXT
+);
+CREATE TABLE IF NOT EXISTS admin_sessions (
+    token_hash TEXT PRIMARY KEY,
+    admin_id INTEGER NOT NULL REFERENCES admins(id) ON DELETE CASCADE,
+    expires REAL NOT NULL
+);
+CREATE TABLE IF NOT EXISTS admin_invites (
+    token_hash TEXT PRIMARY KEY,
+    admin_id INTEGER NOT NULL REFERENCES admins(id) ON DELETE CASCADE,
+    expires REAL NOT NULL
 );
 CREATE TABLE IF NOT EXISTS invites (
     token_hash TEXT PRIMARY KEY,
@@ -96,10 +118,28 @@ class Store:
             self._conn.execute("PRAGMA foreign_keys=ON")
             self._conn.execute("PRAGMA busy_timeout=15000")
             self._conn.executescript(SCHEMA)
-            # Lightweight migrations for databases created by earlier versions.
-            cols = {r["name"] for r in self._conn.execute("PRAGMA table_info(users)")}
-            if "profile" not in cols:
-                self._conn.execute("ALTER TABLE users ADD COLUMN profile TEXT")
+            self._migrate()
+
+    def _migrate(self) -> None:
+        """Bring databases created by earlier versions up to the current users schema."""
+        info = {r["name"]: r for r in self._conn.execute("PRAGMA table_info(users)")}
+        if "profile" not in info:
+            self._conn.execute("ALTER TABLE users ADD COLUMN profile TEXT")
+        if "email" in info and not info["phone"]["notnull"]:
+            return
+        # Phone became optional and email was added: SQLite needs a table rebuild for that.
+        self._conn.execute("PRAGMA foreign_keys=OFF")
+        self._conn.executescript("""
+            CREATE TABLE users_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, phone TEXT UNIQUE, email TEXT UNIQUE,
+                password_hash TEXT, active INTEGER NOT NULL DEFAULT 1, notify_opt_in INTEGER NOT NULL DEFAULT 0,
+                created TEXT NOT NULL, last_login TEXT, profile TEXT);
+            INSERT INTO users_new (id, name, phone, password_hash, active, notify_opt_in, created, last_login, profile)
+                SELECT id, name, phone, password_hash, active, notify_opt_in, created, last_login, profile FROM users;
+            DROP TABLE users;
+            ALTER TABLE users_new RENAME TO users;
+        """)
+        self._conn.execute("PRAGMA foreign_keys=ON")
 
     def _all(self, sql: str, args=()) -> list[dict]:
         with self._lock:
@@ -165,11 +205,14 @@ class Store:
         self._write("DELETE FROM daily_recs")
 
     # ---- participants -----------------------------------------------------
-    def create_user(self, name: str, phone: str) -> int:
+    def create_user(self, name: str, phone: str | None, email: str | None = None) -> int:
+        if not (phone or email):
+            raise ValueError("Give a phone number, an email, or both")
         try:
-            cur = self._write("INSERT INTO users (name, phone, created) VALUES (?,?,?)", (name, phone, _now_iso()))
+            cur = self._write("INSERT INTO users (name, phone, email, created) VALUES (?,?,?,?)",
+                              (name, phone, email, _now_iso()))
         except sqlite3.IntegrityError as exc:
-            raise ValueError(f"A participant with phone {phone} already exists") from exc
+            raise ValueError(f"A participant with this {'phone' if 'phone' in str(exc) else 'email'} already exists") from exc
         return int(cur.lastrowid)
 
     def get_user(self, user_id: int) -> dict | None:
@@ -178,21 +221,28 @@ class Store:
     def get_user_by_phone(self, phone: str) -> dict | None:
         return self._one("SELECT * FROM users WHERE phone = ?", (phone,))
 
+    def get_user_by_email(self, email: str) -> dict | None:
+        return self._one("SELECT * FROM users WHERE email = ?", (email,))
+
     def list_users(self) -> list[dict]:
         return self._all(
-            "SELECT u.id, u.name, u.phone, u.active, u.notify_opt_in, u.created, u.last_login,"
+            "SELECT u.id, u.name, u.phone, u.email, u.active, u.notify_opt_in, u.created, u.last_login,"
             " u.password_hash IS NOT NULL AS activated, u.profile IS NOT NULL AS has_profile,"
             " p.uploaded AS portfolio_uploaded, json_array_length(p.holdings) AS holdings_count,"
             " (SELECT status FROM notifications n WHERE n.user_id = u.id ORDER BY n.id DESC LIMIT 1) AS last_notification"
             " FROM users u LEFT JOIN portfolios p ON p.user_id = u.id ORDER BY u.name")
 
     def update_user(self, user_id: int, **fields) -> None:
-        allowed = {"name", "active", "notify_opt_in", "password_hash", "last_login"}
+        """Raises ValueError if a new phone/email is already used by someone else."""
+        allowed = {"name", "active", "notify_opt_in", "password_hash", "last_login", "email", "phone"}
         cols = {k: v for k, v in fields.items() if k in allowed}
         if not cols:
             return
         sets = ", ".join(f"{k} = ?" for k in cols)
-        self._write(f"UPDATE users SET {sets} WHERE id = ?", (*cols.values(), user_id))
+        try:
+            self._write(f"UPDATE users SET {sets} WHERE id = ?", (*cols.values(), user_id))
+        except sqlite3.IntegrityError as exc:
+            raise ValueError("That phone number or email is already used by another participant") from exc
 
     def get_profile(self, user_id: int) -> dict | None:
         row = self._one("SELECT profile FROM users WHERE id = ?", (user_id,))
@@ -208,7 +258,7 @@ class Store:
         self._write("DELETE FROM users WHERE id = ?", (user_id,))
 
     def opted_in_users(self) -> list[dict]:
-        return self._all("SELECT * FROM users WHERE active = 1 AND notify_opt_in = 1 ORDER BY id")
+        return self._all("SELECT * FROM users WHERE active = 1 AND notify_opt_in = 1 AND phone IS NOT NULL ORDER BY id")
 
     # ---- invites & sessions -----------------------------------------------
     def create_invite(self, user_id: int, token: str, ttl_s: float) -> None:
@@ -244,6 +294,68 @@ class Store:
 
     def delete_user_sessions(self, user_id: int) -> None:
         self._write("DELETE FROM sessions WHERE user_id = ?", (user_id,))
+
+    # ---- admin accounts -----------------------------------------------------
+    def create_admin(self, email: str, role: str, name: str = "", password_hash: str | None = None) -> int:
+        try:
+            cur = self._write("INSERT INTO admins (email, name, password_hash, role, created) VALUES (?,?,?,?,?)",
+                              (email, name, password_hash, role, _now_iso()))
+        except sqlite3.IntegrityError as exc:
+            raise ValueError(f"An admin with email {email} already exists") from exc
+        return int(cur.lastrowid)
+
+    def get_admin(self, admin_id: int) -> dict | None:
+        return self._one("SELECT * FROM admins WHERE id = ?", (admin_id,))
+
+    def get_admin_by_email(self, email: str) -> dict | None:
+        return self._one("SELECT * FROM admins WHERE email = ?", (email,))
+
+    def master_admin(self) -> dict | None:
+        return self._one("SELECT * FROM admins WHERE role = 'master' ORDER BY id LIMIT 1")
+
+    def list_admins(self) -> list[dict]:
+        return self._all("SELECT id, email, name, role, active, created, last_login,"
+                         " password_hash IS NOT NULL AS has_password FROM admins ORDER BY role DESC, email")
+
+    def update_admin(self, admin_id: int, **fields) -> None:
+        cols = {k: v for k, v in fields.items() if k in {"name", "password_hash", "active", "last_login", "role"}}
+        if cols:
+            sets = ", ".join(f"{k} = ?" for k in cols)
+            self._write(f"UPDATE admins SET {sets} WHERE id = ?", (*cols.values(), admin_id))
+
+    def delete_admin(self, admin_id: int) -> None:
+        self._write("DELETE FROM admins WHERE id = ?", (admin_id,))
+
+    def create_admin_session(self, admin_id: int, token: str, ttl_s: float) -> None:
+        now = time.time()
+        with self._lock, self._conn:
+            self._conn.execute("DELETE FROM admin_sessions WHERE expires < ?", (now,))
+            self._conn.execute("INSERT INTO admin_sessions (token_hash, admin_id, expires) VALUES (?,?,?)",
+                               (token_hash(token), admin_id, now + ttl_s))
+
+    def admin_session(self, token: str) -> dict | None:
+        return self._one(
+            "SELECT a.* FROM admin_sessions s JOIN admins a ON a.id = s.admin_id"
+            " WHERE s.token_hash = ? AND s.expires >= ? AND a.active = 1", (token_hash(token), time.time()))
+
+    def delete_admin_session(self, token: str) -> None:
+        self._write("DELETE FROM admin_sessions WHERE token_hash = ?", (token_hash(token),))
+
+    def delete_admin_sessions(self, admin_id: int) -> None:
+        self._write("DELETE FROM admin_sessions WHERE admin_id = ?", (admin_id,))
+
+    def create_admin_invite(self, admin_id: int, token: str, ttl_s: float) -> None:
+        with self._lock, self._conn:
+            self._conn.execute("DELETE FROM admin_invites WHERE admin_id = ?", (admin_id,))
+            self._conn.execute("INSERT INTO admin_invites (token_hash, admin_id, expires) VALUES (?,?,?)",
+                               (token_hash(token), admin_id, time.time() + ttl_s))
+
+    def consume_admin_invite(self, token: str) -> int | None:
+        h = token_hash(token)
+        with self._lock, self._conn:
+            row = self._conn.execute("SELECT admin_id, expires FROM admin_invites WHERE token_hash = ?", (h,)).fetchone()
+            self._conn.execute("DELETE FROM admin_invites WHERE token_hash = ?", (h,))
+        return int(row["admin_id"]) if row and row["expires"] >= time.time() else None
 
     # ---- portfolios ---------------------------------------------------------
     def save_portfolio(self, user_id: int, holdings: list[dict], unresolved: list[str], source_name: str) -> None:

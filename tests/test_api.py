@@ -57,7 +57,8 @@ def test_production_requires_strong_admin_token(monkeypatch):
     from app import main
     monkeypatch.setattr(main, "IS_PRODUCTION", True)
     monkeypatch.delenv("ADMIN_TOKEN", raising=False)
-    with pytest.raises(RuntimeError, match="not set"):
+    monkeypatch.delenv("MASTER_ADMIN_EMAIL", raising=False)
+    with pytest.raises(RuntimeError, match="No admin login configured"):
         main.check_production_config()
     monkeypatch.setenv("ADMIN_TOKEN", "short")
     with pytest.raises(RuntimeError, match="only 5 characters"):

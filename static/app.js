@@ -20,7 +20,9 @@ async function loadMe() {
     $("pf-capital").value = me.profile.capital_inr; $("pf-fno").checked = me.profile.fno_enabled;
   }
   $("opt-in").checked = me.notify_opt_in;
-  $("opt-in-label").textContent = `Send me today's strategy on WhatsApp (${me.phone}) at ${me.notify_time}`;
+  $("opt-in").disabled = !me.phone;
+  $("opt-in-label").textContent = me.phone ? `Send me today's strategy on WhatsApp (${me.phone}) at ${me.notify_time}`
+    : "WhatsApp messages need a phone number — ask the admin to add yours.";
   $("opt-in-note").textContent = me.notifications_live
     ? "Messages go out on trading days. You can turn this off anytime."
     : "Daily messages are not switched on by the admin yet — your choice is saved for when they are.";

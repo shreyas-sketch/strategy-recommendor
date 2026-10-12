@@ -24,7 +24,7 @@ pip install -r requirements-dev.txt
 cp .env.example .env            # fill in ANTHROPIC_API_KEY, ADMIN_TOKEN, …
 echo "COOKIE_SECURE=0" >> .env  # local http only
 uvicorn app.main:app --reload
-pytest                          # 83 tests
+pytest                          # 95 tests
 ```
 
 * Admin: http://localhost:8000/admin (sign in with `ADMIN_TOKEN`)
@@ -38,8 +38,8 @@ pytest                          # 83 tests
    database (participants, portfolios, usage), admin settings and strategies all live
    there. Without it, everything is wiped on every redeploy. The app finds the volume
    through `RAILWAY_VOLUME_MOUNT_PATH`.
-3. **Variables:** `ANTHROPIC_API_KEY`, `ADMIN_TOKEN` (at least 24 random characters, e.g.
-   `python -c "import secrets; print(secrets.token_urlsafe(32))"`), `AISENSY_API_KEY`, and
+3. **Variables:** `ANTHROPIC_API_KEY`, `MASTER_ADMIN_EMAIL` + `MASTER_ADMIN_PASSWORD` (and/or
+   `ADMIN_TOKEN`, 24+ random characters), `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET`, `AISENSY_API_KEY`, and
    your data keys (`GROWW_API_KEY` + `GROWW_TOTP_SECRET` for a TOTP key, `TWELVEDATA_API_KEY`).
 4. **Networking → Generate domain.** Invite links use it automatically
    (`RAILWAY_PUBLIC_DOMAIN`), or set `PUBLIC_BASE_URL` for a custom domain.
@@ -49,6 +49,36 @@ pytest                          # 83 tests
 
 The app refuses to start in production if `ADMIN_TOKEN` is weak, and it logs a loud
 warning if no volume is attached. API docs (`/docs`) are disabled in production.
+
+## Sign-in
+
+**Admins.** A master admin is created on first start from `MASTER_ADMIN_EMAIL` and
+`MASTER_ADMIN_PASSWORD` (12+ characters).
+* **Signing in:** email + password at `/admin`, or "Sign in with Google" with the same email.
+* **Sub-admins:** added by the master under Admins. They manage participants and
+  strategies; only the master changes the AI model, budget, WhatsApp settings and admins.
+* **Admin token:** `ADMIN_TOKEN` still works as a master-level token for scripts or
+  emergencies.
+* **Forgotten master password:** set `MASTER_ADMIN_PASSWORD_RESET=1` with the new
+  password for one deploy, then remove it.
+
+**Participants.** Add each person with a Google email, a WhatsApp number, or both.
+* **Google email:** they open the site and click "Sign in with Google". Only pre-approved
+  emails get in; anyone else is told to ask the admin.
+* **Phone:** they get a one-time invite link to set a password, then sign in with
+  mobile + password. WhatsApp messages need a phone number.
+
+**Setting up Google sign-in (one time, free):**
+1. Go to Google Cloud Console → create a project → **APIs & Services → OAuth consent
+   screen**. Choose **External**, fill in the app name and support email, and **publish**
+   it. "Testing" mode only allows listed test users.
+2. **Credentials → Create credentials → OAuth client ID**, type **Web application**.
+   Authorised redirect URI: `https://<your-domain>/auth/google/callback`.
+3. In Railway Variables, set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`. The Google
+   buttons appear automatically.
+
+The app requests only `openid email profile`. It accepts only Google-verified emails,
+checks every claim in the ID token, and stores no Google tokens.
 
 ## Participants and privacy
 
