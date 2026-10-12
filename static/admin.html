@@ -150,6 +150,14 @@
           <label for="f-squeeze">Bollinger squeeze</label>
           <select id="f-squeeze"><option value="any">Doesn't matter</option><option value="true">Needs a squeeze</option><option value="false">Avoid squeezes</option></select>
         </div>
+        <fieldset class="full"><legend>Who it suits (hard filter — participants below these never get it)</legend>
+          <div class="form-grid">
+            <div><label for="f-risklevel">Risk level</label><select id="f-risklevel"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></div>
+            <div><label for="f-mincap">Minimum capital (₹, incl. margin)</label><input id="f-mincap" type="number" min="0" step="1000"></div>
+            <div><label for="f-minexp">Minimum experience</label><select id="f-minexp"><option value="beginner">Beginner</option><option value="intermediate">Intermediate</option><option value="advanced">Advanced</option></select></div>
+          </div>
+          <p class="muted small" style="margin:6px 0 0">Strategies whose instruments are only options/futures also require the participant to have an F&amp;O account.</p>
+        </fieldset>
         <div class="full"><label for="f-avoid">Avoid when… (one per line)</label><textarea id="f-avoid" rows="3"></textarea></div>
         <div class="full"><label for="f-risk">Risk notes</label><textarea id="f-risk" rows="2"></textarea></div>
         <p class="muted small full" style="margin:0">Leaving a condition group empty means "any". Saved strategies are used by the next analysis.</p>

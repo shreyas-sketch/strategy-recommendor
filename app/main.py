@@ -21,6 +21,7 @@ from .config import IS_PRODUCTION, ROOT, AdminSettings, Horizon, Settings, Strat
 from .data.base import ProviderError
 from .notify import AISensyClient, DailyJobs, scheduler_loop
 from .portfolio import TEMPLATE_CSV, GrowwIsinResolver, PortfolioAdvisor, PortfolioError, parse_portfolio
+from .profile import TradingProfile, apply_profile, split
 from .service import BudgetExceeded, QuotaExceeded, RecommendationService, today_ist
 from .store import Store
 
@@ -237,7 +238,12 @@ def create_app(settings: Settings | None = None, service: RecommendationService 
         return {"name": user["name"], "phone": auth.mask_phone(user["phone"]),
                 "notify_opt_in": bool(user["notify_opt_in"]),
                 "notifications_live": settings.admin.notify_enabled, "notify_time": settings.admin.notify_time,
-                "has_portfolio": bool(portfolio)}
+                "has_portfolio": bool(portfolio), "profile": store.get_profile(user["id"])}
+
+    @app.put("/api/me/profile")
+    def set_profile(profile: TradingProfile, user: dict = Depends(current_user)):
+        store.set_profile(user["id"], profile.model_dump())
+        return {"profile": profile.model_dump()}
 
     @app.put("/api/me/notifications")
     def set_notifications(pref: NotifyPref, user: dict = Depends(current_user)):
@@ -315,8 +321,16 @@ def create_app(settings: Settings | None = None, service: RecommendationService 
             raise HTTPException(422, "instrument must be a plain symbol like NIFTY50 or RELIANCE")
         try:
             # Bypassing the cache costs money, so only the admin may force a fresh analysis.
-            return service.recommend(req.instrument, req.horizon, force_refresh=req.force_refresh and is_admin,
-                                     quota_user=None if is_admin else user["id"])
+            payload = service.recommend(req.instrument, req.horizon, force_refresh=req.force_refresh and is_admin,
+                                        quota_user=None if is_admin else user["id"])
+            # The analysis is shared across participants; suitability is applied per person on top.
+            raw = store.get_profile(user["id"]) if user else None
+            if raw:
+                strategies = settings.strategies_for(req.horizon)
+                eligible, excluded = split(strategies, TradingProfile(**raw))
+                payload = {**payload, "recommendation": apply_profile(
+                    payload["recommendation"], {s.id for s in eligible}, excluded, {s.id: s.name for s in strategies})}
+            return payload
         except BudgetExceeded as exc:
             raise HTTPException(402, str(exc))
         except QuotaExceeded as exc:

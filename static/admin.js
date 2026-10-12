@@ -115,15 +115,16 @@ $("invite-csv").onclick = () => {
 
 async function loadParticipants() {
   const { participants } = await api("/api/admin/participants");
-  $("participants").innerHTML = `<tr><th>Name</th><th>Phone</th><th>Status</th><th>Portfolio</th><th>WhatsApp</th><th>Last login</th><th></th></tr>` +
+  $("participants").innerHTML = `<tr><th>Name</th><th>Phone</th><th>Status</th><th>Profile</th><th>Portfolio</th><th>WhatsApp</th><th>Last login</th><th></th></tr>` +
     (participants.length ? participants.map((p) => `<tr>
       <td>${esc(p.name)}</td><td>${esc(p.phone)}</td>
       <td>${!p.active ? '<span class="pill avoid">disabled</span>' : p.activated ? '<span class="pill recommended">active</span>' : '<span class="pill conditional">invited</span>'}</td>
+      <td>${p.has_profile ? "set" : '<span class="muted">—</span>'}</td>
       <td>${p.holdings_count ? `${p.holdings_count} holdings` : '<span class="muted">—</span>'}</td>
       <td>${p.notify_opt_in ? "opted in" : '<span class="muted">off</span>'}${p.last_notification ? ` <span class="muted small">(${esc(p.last_notification)})</span>` : ""}</td>
       <td class="small">${esc(p.last_login || "—")}</td>
       <td class="actions"><button data-invite="${p.id}">New invite</button> <button data-toggle="${p.id}" data-active="${p.active}">${p.active ? "Disable" : "Enable"}</button> <button class="danger" data-remove="${p.id}" data-name="${esc(p.name)}">Delete</button></td>
-    </tr>`).join("") : `<tr><td colspan="7" class="muted">No participants yet.</td></tr>`);
+    </tr>`).join("") : `<tr><td colspan="8" class="muted">No participants yet.</td></tr>`);
 }
 
 $("add-participant").addEventListener("submit", async (e) => {
@@ -207,9 +208,10 @@ const setChecks = (g, vals) => document.querySelectorAll(`.checks[data-group="${
 
 async function loadStrategies() {
   strategies = (await api("/api/admin/strategies")).strategies;
-  $("strategy-list").innerHTML = `<tr><th>Name</th><th>ID</th><th>Category</th><th>Horizons</th><th></th></tr>` +
+  $("strategy-list").innerHTML = `<tr><th>Name</th><th>ID</th><th>Category</th><th>Horizons</th><th>Suits</th><th></th></tr>` +
     strategies.map((st) => `<tr><td>${esc(st.name)}</td><td class="muted">${esc(st.id)}</td><td>${esc(st.category)}</td>
       <td>${esc(st.horizons.join(", "))}</td>
+      <td class="small">${esc(st.risk_level)} risk · ${esc(st.min_experience)}+ · ₹${Number(st.min_capital_inr).toLocaleString("en-IN")}+</td>
       <td class="actions"><button data-edit="${esc(st.id)}">Edit</button> <button class="danger" data-del="${esc(st.id)}">Delete</button></td></tr>`).join("");
 }
 
@@ -223,6 +225,9 @@ function openForm(st) {
   const c = st?.ideal_conditions || {};
   setChecks("trend", c.trend); setChecks("trend_strength", c.trend_strength); setChecks("volatility", c.volatility);
   $("f-squeeze").value = String(c.squeeze ?? "any");
+  $("f-risklevel").value = st?.risk_level || "medium";
+  $("f-mincap").value = st?.min_capital_inr ?? 0;
+  $("f-minexp").value = st?.min_experience || "beginner";
   $("strategy-form-card").classList.remove("hidden");
   $("strategy-form-card").scrollIntoView({ behavior: "smooth" });
 }
@@ -251,6 +256,9 @@ $("strategy-form").addEventListener("submit", async (e) => {
                         volatility: getChecks("volatility"), squeeze: sq === "any" ? "any" : sq === "true" },
     avoid_conditions: $("f-avoid").value.split("\n").map((x) => x.trim()).filter(Boolean),
     risk_notes: $("f-risk").value.trim(),
+    risk_level: $("f-risklevel").value,
+    min_capital_inr: Math.round(Number($("f-mincap").value || 0)),
+    min_experience: $("f-minexp").value,
   };
   if (!body.horizons.length) return showError("Pick at least one horizon.");
   $("f-save").disabled = true;

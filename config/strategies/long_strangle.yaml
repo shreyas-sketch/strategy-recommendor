@@ -19,3 +19,8 @@ avoid_conditions:
   - "Quiet market with no catalyst — time decay bleeds both legs"
 risk_notes: >
   Theta decay if the expected move does not come.
+
+# Suitability: participants below these never get this strategy.
+risk_level: medium
+min_capital_inr: 25000
+min_experience: intermediate

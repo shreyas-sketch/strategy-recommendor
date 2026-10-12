@@ -110,7 +110,7 @@ def build_system(horizon: str, strategies: list[Strategy]) -> str:
 def build_user(instrument_label: str, snapshot: dict, rule_scores: list[dict]) -> str:
     return (
         f"Instrument: {instrument_label}\n\n"
-        f"Market snapshot (computed from candles):\n{json.dumps(snapshot, indent=1)}\n\n"
+        f"Market snapshot (computed from candles):\n{json.dumps(snapshot, indent=1, ensure_ascii=False)}\n\n"
         f"Rule-engine pre-scores (hint only):\n{json.dumps(rule_scores)}\n\n"
         "Recommend the best strategy for this horizon."
     )
@@ -126,7 +126,9 @@ How to decide:
 - run_on: say what to apply the strategy to — the benchmark index or one specific holding symbol from the list. Respect each strategy's instruments list.
 - The rule_score is a market-only hint; override it when the portfolio changes the picture.
 - If no strategy fits, set top_strategy_id to {no_trade} and explain — sitting out is valid.
-- Rank every strategy in the catalog exactly once with its exact id; fit scores must match the order.
+- Suitability comes first. Only the strategies in eligible_strategy_ids may be recommended or ranked; the others were excluded by hard rules for this participant's profile (risk tolerance, experience, capital, F&O access) and are listed in excluded_strategies for context only.
+- Within the eligible set, weigh participant_profile: prefer simpler rules for beginners, defined-risk strategies for low risk tolerance, and nothing whose sizing is unrealistic for the capital band. Mention the profile in why when it shaped the pick.
+- Rank every eligible strategy exactly once with its exact id; fit scores must match the order.
 - Justify the pick against the alternatives: why_top_over_others names the runner-up and the separating numbers; vs_top on every strategy gives the concrete reason it ranks below the pick; deciding_factors lists 3-6 facts with the strategy ids each favors and hurts.
 - Short, concrete, cite numbers (e.g. "38% of the portfolio is in downtrending stocks", "HDFCBANK RSI 74"). Decision support only — never promise profits.
 
@@ -144,7 +146,7 @@ def build_portfolio_system(strategies: list[Strategy]) -> str:
 def build_portfolio_user(context: dict, rule_scores: list[dict]) -> str:
     # The context carries holdings and statistics only — never the participant's name or phone.
     return (
-        f"Benchmark and portfolio data:\n{json.dumps(context, indent=1)}\n\n"
+        f"Benchmark and portfolio data:\n{json.dumps(context, indent=1, ensure_ascii=False)}\n\n"
         f"Rule-engine market pre-scores (hint only):\n{json.dumps(rule_scores)}\n\n"
         "Which strategy should this participant run today?"
     )
@@ -166,11 +168,13 @@ class ClaudeRecommender:
                                  build_user(instrument_label, snapshot, rule_scores), Recommendation)
         return _sanitize(rec, strategies, rule_scores), usage
 
-    def recommend_portfolio(self, *, model: ModelInfo, effort: str, strategies: list[Strategy],
-                            context: dict, rule_scores: list[dict]):
-        rec, usage = self._parse(model, effort, build_portfolio_system(strategies),
+    def recommend_portfolio(self, *, model: ModelInfo, effort: str, catalog: list[Strategy],
+                            eligible: list[Strategy], context: dict, rule_scores: list[dict]):
+        # The system prompt carries the full catalog so it stays identical (and cached) across
+        # participants; eligibility goes in the per-participant message and is enforced by _sanitize.
+        rec, usage = self._parse(model, effort, build_portfolio_system(catalog),
                                  build_portfolio_user(context, rule_scores), PortfolioRecommendation)
-        return _sanitize(rec, strategies, rule_scores), usage
+        return _sanitize(rec, eligible, rule_scores), usage
 
     def _parse(self, model: ModelInfo, effort: str, system: str, user: str, output_format):
         kwargs: dict = dict(

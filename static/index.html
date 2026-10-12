@@ -22,6 +22,10 @@
 
   <!-- Today -->
   <section id="tab-today">
+    <div id="profile-nudge" class="notice hidden" style="margin-bottom:16px">
+      Tell us your risk tolerance, experience and capital in <a href="#" id="go-settings">Settings</a> —
+      then you'll only be recommended strategies that suit you.
+    </div>
     <div id="today-empty" class="card hidden">
       <h2>Get a recommendation for your portfolio</h2>
       <p>Upload your holdings in <b>My portfolio</b> and you will get a strategy picked for <i>your</i> stocks every day.
@@ -74,6 +78,33 @@
 
   <!-- Settings -->
   <section id="tab-settings" class="hidden">
+    <div class="card">
+      <h2>My trading profile</h2>
+      <p class="muted small" style="margin-top:0">Strategies that don't match your profile are never recommended to you. Only you can see this.</p>
+      <form id="profile-form" class="form-grid">
+        <div>
+          <label for="pf-risk">Risk tolerance</label>
+          <select id="pf-risk" required>
+            <option value="">Choose…</option>
+            <option value="low">Low — I want to protect my capital</option>
+            <option value="medium">Medium — some ups and downs are fine</option>
+            <option value="high">High — I accept large swings for higher returns</option>
+          </select>
+        </div>
+        <div>
+          <label for="pf-exp">Trading experience</label>
+          <select id="pf-exp" required>
+            <option value="">Choose…</option>
+            <option value="beginner">Beginner — under 1 year</option>
+            <option value="intermediate">Intermediate — 1 to 3 years</option>
+            <option value="advanced">Advanced — 3+ years, comfortable with F&amp;O</option>
+          </select>
+        </div>
+        <div><label for="pf-capital">Capital for algo trading (₹)</label><input id="pf-capital" type="number" min="0" step="1000" required placeholder="200000"></div>
+        <div style="align-self:end"><label class="switch-row"><input type="checkbox" id="pf-fno"> I have an F&amp;O (futures &amp; options) account</label></div>
+        <div class="full row"><button class="primary" id="pf-save">Save profile</button><span class="small" id="pf-msg"></span></div>
+      </form>
+    </div>
     <div class="card">
       <h2>Daily WhatsApp message</h2>
       <label class="switch-row"><input type="checkbox" id="opt-in"> <span id="opt-in-label">Send me today's strategy on WhatsApp</span></label>

@@ -15,6 +15,7 @@ import requests
 
 from .analysis.regime import rule_scores
 from .llm.recommender import NO_TRADE, RecommendationRefused
+from .profile import TradingProfile, apply_profile, profile_for_prompt, split
 from .service import RecommendationService, _RulesOnly, rules_recommendation, strategy_cards, today_ist
 
 log = logging.getLogger(__name__)
@@ -286,26 +287,48 @@ class PortfolioAdvisor:
             self.store.put_daily_rec(user_id, day, payload)
             return payload
 
+    def profile(self, user_id: int) -> TradingProfile | None:
+        raw = self.store.get_profile(user_id)
+        return TradingProfile(**raw) if raw else None
+
     def _generate(self, user_id: int, day: str) -> dict:
         admin = self.settings.admin
         strategies = self.settings.strategies_for("1d")
         if not strategies:
             raise ValueError("No strategies are configured for the 1-day horizon")
+        profile = self.profile(user_id)
+        eligible, excluded = split(strategies, profile)
+        eligible_ids = {s.id for s in eligible}
+        names = {s.id: s.name for s in strategies}
+        cards = strategy_cards(strategies)
         bench_inst = self.settings.instrument(admin.portfolio_benchmark)
-        snapshot, provider = self.service.market_snapshot(bench_inst, "1d")
-        scores = rule_scores(snapshot["regime"], strategies)
         portfolio = self.store.get_portfolio(user_id)
-        meta = {"day": day, "engine": "claude", "benchmark": bench_inst["label"], "data_provider": provider,
-                "has_portfolio": bool(portfolio), "note": None, "generated_at": time.time()}
+        meta = {"day": day, "engine": "claude", "benchmark": bench_inst["label"], "data_provider": None,
+                "has_portfolio": bool(portfolio), "has_profile": profile is not None, "note": None,
+                "generated_at": time.time()}
+
+        if not eligible:
+            # Nothing suits this participant: no market data or AI call needed.
+            rec = {"market_summary": "", "portfolio_summary": "", "confidence": "high", "top_strategy_id": NO_TRADE,
+                   "run_on": "", "why": "", "rankings": [], "deciding_factors": [], "portfolio_risks": [],
+                   "why_top_over_others": "None of the platform's strategies suit your trading profile yet. "
+                                          "Review your profile in Settings or ask the admin.",
+                   "whatsapp_line": "No strategy suits your current trading profile.", "excluded": excluded}
+            meta.update(engine="rules")
+            return {"recommendation": rec, "strategies": cards, "meta": meta}
+
+        snapshot, provider = self.service.market_snapshot(bench_inst, "1d")
+        meta["data_provider"] = provider
+        scores = rule_scores(snapshot["regime"], eligible)
 
         if not portfolio:
-            # No portfolio: fall back to the shared market recommendation for the benchmark.
+            # No portfolio: the shared market recommendation, personalised to the profile.
             market = self.service.recommend(bench_inst["key"], "1d")
-            rec = dict(market["recommendation"])
+            rec = apply_profile(market["recommendation"], eligible_ids, excluded, names)
             rec.update(run_on=bench_inst["label"], portfolio_summary="No portfolio uploaded — based on the market only.",
                        portfolio_risks=[], whatsapp_line=_clean_param(rec.get("why_top_over_others", ""), 150))
             meta.update(engine=market["meta"]["engine"], note=market["meta"].get("note"))
-            return {"recommendation": rec, "strategies": strategy_cards(strategies), "meta": meta}
+            return {"recommendation": rec, "strategies": cards, "meta": meta}
 
         bench_view = {"instrument": bench_inst["label"], "regime": snapshot["regime"],
                       "primary": {k: snapshot["primary"].get(k) for k in (
@@ -313,12 +336,14 @@ class PortfolioAdvisor:
                           "realized_vol_annual_pct", "vol_percentile", "bb_width_percentile")},
                       "daily_context": snapshot.get("daily_context")}
         context = portfolio_context(self.service, portfolio["holdings"], bench_view)
+        prompt_context = {**context, "participant_profile": profile_for_prompt(profile),
+                          "eligible_strategy_ids": sorted(eligible_ids), "excluded_strategies": excluded}
 
         rec = None
         try:
             parsed, info = self.service.call_claude(
                 self.service.recommender.recommend_portfolio, label="PORTFOLIO", horizon="1d",
-                strategies=strategies, context=context, rule_scores=scores)
+                catalog=strategies, eligible=eligible, context=prompt_context, rule_scores=scores)
             rec = parsed.model_dump()
             meta.update(model=info["model"], cost_usd=info["cost_usd"], note=info["note"])
         except _RulesOnly as exc:
@@ -328,7 +353,7 @@ class PortfolioAdvisor:
             meta.update(engine="rules", note="AI analysis unavailable — showing rule-engine result.")
 
         if rec is None:
-            rec = rules_recommendation(snapshot, scores, strategies)
+            rec = rules_recommendation(snapshot, scores, eligible)
             st = context["portfolio_stats"]
             rec.update(
                 run_on=bench_inst["label"],
@@ -337,7 +362,8 @@ class PortfolioAdvisor:
                 portfolio_risks=([f"Concentrated: top 3 holdings are {st['top3_weight_pct']}% of value"]
                                  if (st["top3_weight_pct"] or 0) > 60 else []),
                 whatsapp_line=_clean_param(rec["why_top_over_others"], 150))
+        rec = apply_profile(rec, eligible_ids, excluded, names)   # safety net + "excluded" list
         rec["whatsapp_line"] = _clean_param(rec.get("whatsapp_line", ""), 150)
         if rec["top_strategy_id"] != NO_TRADE:
             rec["run_on"] = _clean_param(rec.get("run_on") or bench_inst["label"], 40)
-        return {"recommendation": rec, "context": context, "strategies": strategy_cards(strategies), "meta": meta}
+        return {"recommendation": rec, "context": context, "strategies": cards, "meta": meta}

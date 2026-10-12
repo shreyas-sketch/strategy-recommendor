@@ -94,6 +94,10 @@ class Strategy(BaseModel):
     ideal_conditions: Conditions = Conditions()
     avoid_conditions: list[str] = []
     risk_notes: str = ""
+    # Suitability — participants whose profile doesn't meet these never get this strategy.
+    risk_level: Literal["low", "medium", "high"] = "medium"
+    min_capital_inr: int = Field(0, ge=0)
+    min_experience: Literal["beginner", "intermediate", "advanced"] = "beginner"
 
 
 class Settings:

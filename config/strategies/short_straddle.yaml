@@ -20,3 +20,8 @@ avoid_conditions:
   - "Rising / extreme volatility, event days (budget, RBI policy, results)"
 risk_notes: >
   Unlimited risk on big directional moves; gap risk if held overnight.
+
+# Suitability: participants below these never get this strategy.
+risk_level: high
+min_capital_inr: 300000
+min_experience: advanced

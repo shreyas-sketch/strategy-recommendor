@@ -14,6 +14,11 @@ async function loadMe() {
   const me = await api("/api/me");
   $("who").textContent = me.name;
   $("today-empty").classList.toggle("hidden", me.has_portfolio);
+  $("profile-nudge").classList.toggle("hidden", !!me.profile);
+  if (me.profile) {
+    $("pf-risk").value = me.profile.risk_tolerance; $("pf-exp").value = me.profile.experience;
+    $("pf-capital").value = me.profile.capital_inr; $("pf-fno").checked = me.profile.fno_enabled;
+  }
   $("opt-in").checked = me.notify_opt_in;
   $("opt-in-label").textContent = `Send me today's strategy on WhatsApp (${me.phone}) at ${me.notify_time}`;
   $("opt-in-note").textContent = me.notifications_live
@@ -75,6 +80,20 @@ $("pw-form").addEventListener("submit", async (e) => {
     await api("/api/me/password", { method: "POST", json: { current_password: $("pw-cur").value, new_password: $("pw-new").value } });
     $("pw-msg").textContent = "Password updated. Other devices were signed out."; e.target.reset();
   } catch (err) { $("pw-msg").textContent = err.message; }
+});
+
+$("go-settings").onclick = (e) => { e.preventDefault(); showTab("settings"); };
+
+$("profile-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  $("pf-msg").textContent = "";
+  try {
+    await api("/api/me/profile", { method: "PUT", json: {
+      risk_tolerance: $("pf-risk").value, experience: $("pf-exp").value,
+      capital_inr: Math.round(Number($("pf-capital").value || 0)), fno_enabled: $("pf-fno").checked } });
+    $("pf-msg").textContent = "Saved. Today's recommendation will be refreshed for your profile.";
+    todayLoaded = false; await loadMe();
+  } catch (err) { $("pf-msg").textContent = err.message; }
 });
 
 $("logout").onclick = async () => { await api("/api/auth/logout", { method: "POST" }).catch(() => {}); location.href = "/login"; };

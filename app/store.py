@@ -96,6 +96,10 @@ class Store:
             self._conn.execute("PRAGMA foreign_keys=ON")
             self._conn.execute("PRAGMA busy_timeout=15000")
             self._conn.executescript(SCHEMA)
+            # Lightweight migrations for databases created by earlier versions.
+            cols = {r["name"] for r in self._conn.execute("PRAGMA table_info(users)")}
+            if "profile" not in cols:
+                self._conn.execute("ALTER TABLE users ADD COLUMN profile TEXT")
 
     def _all(self, sql: str, args=()) -> list[dict]:
         with self._lock:
@@ -177,7 +181,7 @@ class Store:
     def list_users(self) -> list[dict]:
         return self._all(
             "SELECT u.id, u.name, u.phone, u.active, u.notify_opt_in, u.created, u.last_login,"
-            " u.password_hash IS NOT NULL AS activated,"
+            " u.password_hash IS NOT NULL AS activated, u.profile IS NOT NULL AS has_profile,"
             " p.uploaded AS portfolio_uploaded, json_array_length(p.holdings) AS holdings_count,"
             " (SELECT status FROM notifications n WHERE n.user_id = u.id ORDER BY n.id DESC LIMIT 1) AS last_notification"
             " FROM users u LEFT JOIN portfolios p ON p.user_id = u.id ORDER BY u.name")
@@ -189,6 +193,15 @@ class Store:
             return
         sets = ", ".join(f"{k} = ?" for k in cols)
         self._write(f"UPDATE users SET {sets} WHERE id = ?", (*cols.values(), user_id))
+
+    def get_profile(self, user_id: int) -> dict | None:
+        row = self._one("SELECT profile FROM users WHERE id = ?", (user_id,))
+        return json.loads(row["profile"]) if row and row["profile"] else None
+
+    def set_profile(self, user_id: int, profile: dict) -> None:
+        with self._lock, self._conn:
+            self._conn.execute("UPDATE users SET profile = ? WHERE id = ?", (json.dumps(profile), user_id))
+            self._conn.execute("DELETE FROM daily_recs WHERE user_id = ?", (user_id,))   # re-pick with new profile
 
     def delete_user(self, user_id: int) -> None:
         # ON DELETE CASCADE removes sessions, invites, portfolio, recommendations, quotas, notifications.

@@ -28,3 +28,10 @@ avoid_conditions:                       # free text, shown to Claude
 
 risk_notes: >
   What typically goes wrong with this strategy.
+
+# Suitability — a hard filter. Participants whose profile is below any of these
+# never get this strategy recommended (it is listed as "not suitable for you").
+risk_level: medium          # low | medium | high  (compared with the participant's risk tolerance)
+min_capital_inr: 50000      # minimum capital needed to run it sensibly (incl. margin)
+min_experience: beginner    # beginner | intermediate | advanced
+# Strategies whose instruments are only options/futures also require an F&O account.

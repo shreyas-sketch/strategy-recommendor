@@ -99,3 +99,4 @@ button.danger { color: var(--bad); }
 .switch-row { display: flex; align-items: center; gap: 8px; color: var(--text); font-size: 15px; }
 .switch-row input { width: 18px; height: 18px; }
 .invite-box { word-break: break-all; background: var(--bg); border: 1px dashed var(--border); border-radius: 8px; padding: 8px 10px; font-size: 13px; }
+.reasons { margin: 4px 0 0; padding-left: 18px; color: var(--muted); }

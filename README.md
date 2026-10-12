@@ -24,7 +24,7 @@ pip install -r requirements-dev.txt
 cp .env.example .env            # fill in ANTHROPIC_API_KEY, ADMIN_TOKEN, …
 echo "COOKIE_SECURE=0" >> .env  # local http only
 uvicorn app.main:app --reload
-pytest                          # 49 tests
+pytest                          # 59 tests
 ```
 
 * Admin: http://localhost:8000/admin (sign in with `ADMIN_TOKEN`)
@@ -80,6 +80,28 @@ Security measures:
 | Headers | strict CSP, no framing, `no-store` on API responses |
 | Uploads | 2 MB request limit; files parsed in memory, never stored; XML-attack-safe Excel parsing |
 | Cost abuse | per-participant daily caps on fresh AI analyses and uploads |
+
+## Trading profiles (suitability)
+
+Each participant fills in **risk tolerance, experience, capital and whether they have an
+F&O account** (Settings → My trading profile). Each strategy has a **risk level, minimum
+capital and minimum experience** (Admin → Strategies). Strategies whose instruments are
+only options/futures also need an F&O account.
+
+* **Hard filter, applied by fixed rules before any AI:** a strategy the participant
+  doesn't meet is never recommended to them. It's listed under "Not suitable for your
+  profile", with the reason.
+* **When the market's best fit is filtered out,** the page says so and picks the best of
+  the strategies that do suit them. If nothing suits them, the answer is "sit out".
+* **Claude weighs the profile** within the suitable set, e.g. simpler rules for beginners.
+  It receives a capital band (e.g. "₹1–5 lakh"), never the exact amount.
+* **No extra AI cost on the market tool:** the analysis is still shared across
+  participants, and suitability is applied per person on top.
+* **Without a profile** nothing is filtered, and participants are prompted to fill it in.
+* **Admin view:** the admin sees only whether a profile is set, not its contents.
+
+Strategies created before this feature default to medium risk, ₹0 minimum and beginner.
+Review them in Admin → Strategies.
 
 ## Portfolio → today's strategy
 

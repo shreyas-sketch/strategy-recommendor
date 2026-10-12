@@ -36,8 +36,14 @@ function recHTML(payload, { personal = false } = {}) {
     ? `${meta.engine === "claude" ? "AI analysis" : "Rule engine"} · benchmark ${esc(meta.benchmark)} · data: ${esc(meta.data_provider)}`
     : `${meta.engine === "claude" ? `AI: ${esc(meta.model)}` : "Rule engine"} · data: ${esc(meta.data_provider)} · as of ${esc(new Date(payload.snapshot.as_of).toLocaleString())}${meta.cached ? ` · cached ${Math.round(meta.cache_age_s / 60)} min ago` : ""}`;
 
+  const excluded = (r.excluded || []).length ? `<section class="card"><h2>Not suitable for your profile</h2>
+      <p class="muted small" style="margin-top:0">These are never recommended to you. Update your profile in Settings if it has changed.</p>
+      ${r.excluded.map((x) => `<div class="strat"><b>${esc(name(x.strategy_id))}</b>
+        <ul class="small reasons">${x.reasons.map((why) => `<li>${esc(why)}</li>`).join("")}</ul></div>`).join("")}</section>` : "";
+
   return notice + topCard + comparisonHTML(r, name, noTrade) + summary +
-    `<section class="card"><h2>All strategies, ranked</h2>${ranked}</section>` +
+    (ranked ? `<section class="card"><h2>${(r.excluded || []).length ? "Strategies that suit you, ranked" : "All strategies, ranked"}</h2>${ranked}</section>` : "") +
+    excluded +
     ((r.reassess_if || []).length ? `<section class="card"><h2>Re-check if…</h2><ul>${r.reassess_if.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></section>` : "") +
     `<p class="muted small">${footer}</p>`;
 }
