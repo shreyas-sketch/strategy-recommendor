@@ -1,0 +1,22 @@
+# EXAMPLE strategy — replace with your own logic.
+id: ema_trend_follow
+name: "EMA Trend Follower"
+category: trend
+instruments: [index, equity, futures]
+horizons: ["1d", "1w", "1m"]
+description: >
+  Rides established trends using a 20/50 EMA crossover with an ADX filter.
+logic: |
+  Long when EMA20 crosses above EMA50 and ADX(14) > 22; short on the reverse.
+  Exit on the opposite crossover or a 2x ATR(14) trailing stop.
+  Risk 1% of capital per trade.
+ideal_conditions:
+  trend: [up, down]
+  trend_strength: [strong, moderate]
+  volatility: [normal, high]
+  squeeze: any
+avoid_conditions:
+  - "Sideways, range-bound market with ADX below 20 (whipsaws)"
+  - "Extreme volatility with large gaps that jump the trailing stop"
+risk_notes: >
+  Gives back profits at trend reversals; many small losses in ranges.

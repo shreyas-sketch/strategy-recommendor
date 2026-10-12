@@ -1,0 +1,22 @@
+# EXAMPLE strategy — replace with your own logic.
+id: short_straddle
+name: "Short Straddle (Theta Decay)"
+category: volatility_selling
+instruments: [options]
+horizons: ["1d", "1w"]
+description: >
+  Sells ATM call and put to collect premium when the market is expected to stay in a range.
+logic: |
+  At 09:20 sell ATM CE and PE of the nearest weekly expiry. 25% stop-loss on
+  each leg; shift the losing leg's stop to cost when one leg is hit.
+  Exit at 15:15 or at 40% of combined premium captured.
+ideal_conditions:
+  trend: [sideways]
+  trend_strength: [weak]
+  volatility: [low, normal]
+  squeeze: false
+avoid_conditions:
+  - "Trending days or strong directional momentum"
+  - "Rising / extreme volatility, event days (budget, RBI policy, results)"
+risk_notes: >
+  Unlimited risk on big directional moves; gap risk if held overnight.

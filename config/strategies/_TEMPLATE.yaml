@@ -1,0 +1,30 @@
+# Copy this file to <your_strategy_id>.yaml and fill it in.
+# Files starting with "_" are ignored by the loader.
+#
+# The more concrete "logic", "ideal_conditions" and "avoid_conditions" are,
+# the better Claude can match the strategy to the market.
+
+id: my_strategy                # unique, lowercase, no spaces
+name: "My Strategy"
+category: trend                # trend | mean_reversion | breakout | volatility_selling | volatility_buying | other
+instruments: [index, equity]   # index | equity | options | futures
+horizons: ["1d", "1w", "1m"]   # which analysis windows this strategy is meant for
+description: >
+  One or two sentences a participant would understand.
+logic: |
+  Entry, exit, stop-loss and position sizing rules, written the way you
+  would explain them to a new trader. Indicator names and thresholds help.
+
+# Machine-readable hints used by the built-in rule engine (and shown to Claude).
+# Leave a list empty / omit it to mean "any".
+ideal_conditions:
+  trend: [up, down]                    # up | down | sideways
+  trend_strength: [strong, moderate]   # strong | moderate | weak
+  volatility: [normal, high]           # low | normal | high | extreme
+  squeeze: any                         # true | false | any (Bollinger squeeze)
+
+avoid_conditions:                       # free text, shown to Claude
+  - "Choppy sideways market"
+
+risk_notes: >
+  What typically goes wrong with this strategy.

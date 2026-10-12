@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Recommender Admin</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header><div class="wrap"><h1>Recommender Admin</h1><a href="/">Participant view</a></div></header>
+<main class="wrap">
+  <section class="card" id="login">
+    <h2>Sign in</h2>
+    <div class="row">
+      <div><label for="token">Admin token</label><input id="token" type="password" size="32"></div>
+      <button class="primary" id="signin">Open admin panel</button>
+    </div>
+  </section>
+  <div id="error" class="error hidden" style="margin-bottom:16px"></div>
+
+  <div id="panel" class="hidden">
+    <section class="card">
+      <h2>AI model</h2>
+      <p class="muted small">Takes effect immediately for the next analysis. Cached results are cleared when you switch.</p>
+      <div class="models" id="models"></div>
+      <div class="row" style="margin-top:14px">
+        <div>
+          <label for="effort">Thinking effort</label>
+          <select id="effort">
+            <option value="low">Low — cheapest</option>
+            <option value="medium">Medium</option>
+            <option value="high">High — most thorough</option>
+          </select>
+        </div>
+        <button class="primary" id="save-model">Save model settings</button>
+      </div>
+      <div id="engine-now" class="small muted" style="margin-top:10px"></div>
+    </section>
+
+    <section class="card">
+      <h2>Spend this month</h2>
+      <div class="row" style="justify-content:space-between"><b id="spend"></b><span class="muted" id="budget-label"></span></div>
+      <div class="meter" id="meter" style="margin:8px 0 14px"><i></i></div>
+      <div class="table-scroll"><table id="by-model"></table></div>
+    </section>
+
+    <section class="card">
+      <h2>Budget &amp; cost controls</h2>
+      <div class="row">
+        <div><label for="budget">Monthly budget (USD, 0 = unlimited)</label><input id="budget" type="number" min="0" step="1" size="10"></div>
+        <div>
+          <label for="on-exceeded">When the budget runs out</label>
+          <select id="on-exceeded">
+            <option value="downgrade">Switch to Haiku 5.5</option>
+            <option value="rules_only">Stop AI, use rule engine</option>
+            <option value="block">Block new analyses</option>
+          </select>
+        </div>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <div><label for="c1d">Re-use result for 1D (min)</label><input id="c1d" type="number" min="0" size="6"></div>
+        <div><label for="c1w">1W (min)</label><input id="c1w" type="number" min="0" size="6"></div>
+        <div><label for="c1m">1M (min)</label><input id="c1m" type="number" min="0" size="6"></div>
+        <div><label for="providers">Data provider order</label><input id="providers" size="28"></div>
+        <button class="primary" id="save-budget">Save</button>
+      </div>
+      <p class="muted small">Re-using results means 100 participants checking NIFTY 50 in the same 15 minutes cost one AI call, not 100.</p>
+    </section>
+
+    <section class="card">
+      <h2>Strategies &amp; testing</h2>
+      <div class="row">
+        <button id="reload">Reload strategy files</button>
+        <input id="test-inst" value="NIFTY50" size="12">
+        <select id="test-h"><option>1d</option><option>1w</option><option>1m</option></select>
+        <button id="test">Run fresh analysis (bypasses cache)</button>
+      </div>
+      <pre id="out" class="hidden"></pre>
+    </section>
+
+    <section class="card">
+      <h2>Recent AI calls</h2>
+      <div class="table-scroll"><table id="recent"></table></div>
+    </section>
+  </div>
+</main>
+<script src="/static/admin.js"></script>
+</body>
+</html>

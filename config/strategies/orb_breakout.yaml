@@ -1,0 +1,22 @@
+# EXAMPLE strategy — replace with your own logic.
+id: orb_breakout
+name: "Opening Range Breakout"
+category: breakout
+instruments: [index, equity, futures]
+horizons: ["1d"]
+description: >
+  Trades the break of the first 15-minute range of the session.
+logic: |
+  Mark high/low of the first 15 minutes. Enter on a 5-minute close beyond
+  the range in the direction of the break. Stop at the opposite end of the
+  range, target 2x range. Exit everything by 15:15.
+ideal_conditions:
+  trend: [up, down]
+  trend_strength: [strong, moderate]
+  volatility: [normal, high]
+  squeeze: true
+avoid_conditions:
+  - "Low-volatility, narrow-range sessions (false breakouts)"
+  - "Event days where the opening range is already huge"
+risk_notes: >
+  False breakouts in quiet markets; slippage on fast opens.

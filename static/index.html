@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Strategy Recommender</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header><div class="wrap"><h1>Strategy Recommender</h1><a href="/admin">Admin</a></div></header>
+<main class="wrap">
+  <section class="card">
+    <h2>Which strategy should I run?</h2>
+    <div class="row">
+      <div>
+        <label for="instrument">Instrument</label>
+        <input id="instrument" list="instrument-list" value="NIFTY50" size="14" autocomplete="off">
+        <datalist id="instrument-list"></datalist>
+      </div>
+      <div>
+        <label>Horizon</label>
+        <div class="seg" id="horizons"></div>
+      </div>
+      <button class="primary" id="go">Analyze market</button>
+    </div>
+    <p class="muted small">Pick a listed instrument or type any NSE stock symbol (e.g. RELIANCE).</p>
+  </section>
+
+  <div id="error" class="error hidden"></div>
+  <div id="result" class="hidden">
+    <div id="notice" class="notice hidden" style="margin-bottom:16px"></div>
+    <section class="card top" id="top"></section>
+    <section class="card">
+      <h2>Market regime</h2>
+      <div class="grid" id="regime"></div>
+      <p id="summary" style="margin:12px 0 0"></p>
+    </section>
+    <section class="card">
+      <h2>All strategies, ranked</h2>
+      <div id="rankings"></div>
+    </section>
+    <section class="card">
+      <h2>Re-check if…</h2>
+      <ul id="reassess"></ul>
+      <details><summary>Raw market numbers</summary><pre id="raw"></pre></details>
+      <p class="muted small" id="meta"></p>
+    </section>
+  </div>
+  <p class="muted small">Decision support only — not financial advice. Always apply your own risk limits.</p>
+</main>
+<script src="/static/app.js"></script>
+</body>
+</html>

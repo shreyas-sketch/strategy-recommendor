@@ -1,0 +1,21 @@
+# EXAMPLE strategy — replace with your own logic.
+id: long_strangle
+name: "Long Strangle (Volatility Expansion)"
+category: volatility_buying
+instruments: [options]
+horizons: ["1d", "1w"]
+description: >
+  Buys OTM call and put ahead of an expected volatility expansion.
+logic: |
+  When Bollinger bandwidth is in its lowest 20% (squeeze), buy 1-strike OTM CE
+  and PE. Exit when one leg doubles, or at 30% loss of total premium.
+ideal_conditions:
+  trend: [sideways, up, down]
+  trend_strength: [weak, moderate]
+  volatility: [low]
+  squeeze: true
+avoid_conditions:
+  - "Already-elevated volatility (premiums expensive)"
+  - "Quiet market with no catalyst — time decay bleeds both legs"
+risk_notes: >
+  Theta decay if the expected move does not come.

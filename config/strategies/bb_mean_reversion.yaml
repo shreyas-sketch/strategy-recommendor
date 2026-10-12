@@ -1,0 +1,22 @@
+# EXAMPLE strategy — replace with your own logic.
+id: bb_mean_reversion
+name: "Bollinger Mean Reversion"
+category: mean_reversion
+instruments: [index, equity]
+horizons: ["1d", "1w"]
+description: >
+  Fades moves to the outer Bollinger Bands in a range-bound market.
+logic: |
+  Buy when price closes below the lower Bollinger Band (20, 2) and RSI(14) < 30;
+  sell when it closes above the upper band and RSI > 70.
+  Target the middle band; stop 1x ATR beyond the entry candle.
+ideal_conditions:
+  trend: [sideways]
+  trend_strength: [weak]
+  volatility: [low, normal]
+  squeeze: false
+avoid_conditions:
+  - "Strong trending market — bands 'walk' and fades keep losing"
+  - "Volatility expansion after a squeeze"
+risk_notes: >
+  One strong trend day can wipe out many small wins.

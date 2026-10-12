@@ -1,0 +1,81 @@
+# Static defaults. Anything the admin changes in the admin panel is saved to
+# data/admin_settings.json and overrides the matching key here.
+
+# ---------------------------------------------------------------------------
+# Claude models the admin can switch between.
+# Prices are USD per 1M tokens (Anthropic first-party API, Oct 2026).
+# Update them here if Anthropic changes pricing — the cost tracker uses them.
+# ---------------------------------------------------------------------------
+models:
+  claude-haiku-5-5:
+    label: "Haiku 5.5"
+    tagline: "Cheapest. Good for routine, clear-cut markets."
+    input_per_mtok: 0.10
+    output_per_mtok: 0.50
+    cache_read_per_mtok: 0.01
+    # Haiku has no server-side refusal fallback.
+    server_fallback: false
+  claude-sonnet-5-5:
+    label: "Sonnet 5.5"
+    tagline: "Balanced cost and judgement. Recommended default."
+    input_per_mtok: 2.00
+    output_per_mtok: 10.00
+    cache_read_per_mtok: 0.20
+    server_fallback: true
+  claude-opus-5-5:
+    label: "Opus 5.5"
+    tagline: "Most careful analysis. Use for mixed / confusing markets."
+    input_per_mtok: 4.00
+    output_per_mtok: 20.00
+    cache_read_per_mtok: 0.20
+    server_fallback: true
+
+# Defaults the admin can override at runtime.
+defaults:
+  active_model: claude-sonnet-5-5
+  # low | medium | high — higher = more thinking tokens = more cost.
+  effort: medium
+  # Monthly Claude spend limit in USD. 0 = no limit.
+  monthly_budget_usd: 50
+  # What happens once the monthly budget is used up:
+  #   downgrade  -> switch to Haiku 5.5 automatically
+  #   rules_only -> stop calling Claude, use the built-in rule engine
+  #   block      -> refuse new analyses until next month / budget raised
+  on_budget_exceeded: downgrade
+  # Data providers tried in order; the first that returns data wins.
+  provider_order: [groww, twelvedata, yfinance]
+  # Re-use a recent recommendation for the same instrument + horizon instead
+  # of calling Claude again (minutes). Biggest single cost saver when many
+  # participants look at the same instrument.
+  cache_minutes:
+    "1d": 15
+    "1w": 60
+    "1m": 360
+
+# ---------------------------------------------------------------------------
+# Instruments shown in the dropdown. Each provider has its own symbol format.
+# Participants can also type any NSE equity symbol (e.g. RELIANCE); it is
+# mapped automatically: yfinance RELIANCE.NS, Twelve Data RELIANCE/NSE,
+# Groww NSE-RELIANCE.
+# ---------------------------------------------------------------------------
+instruments:
+  - key: NIFTY50
+    label: "NIFTY 50"
+    yfinance: "^NSEI"
+    twelvedata: { symbol: "NIFTY", exchange: "NSE" }   # verify on your Twelve Data plan
+    groww: { exchange: NSE, segment: CASH, groww_symbol: "NSE-NIFTY" }
+  - key: BANKNIFTY
+    label: "NIFTY BANK"
+    yfinance: "^NSEBANK"
+    twelvedata: { symbol: "BANKNIFTY", exchange: "NSE" }
+    groww: { exchange: NSE, segment: CASH, groww_symbol: "NSE-BANKNIFTY" }
+  - key: FINNIFTY
+    label: "NIFTY FIN SERVICE"
+    yfinance: "NIFTY_FIN_SERVICE.NS"
+    twelvedata: { symbol: "FINNIFTY", exchange: "NSE" }
+    groww: { exchange: NSE, segment: CASH, groww_symbol: "NSE-FINNIFTY" }
+  - key: SENSEX
+    label: "SENSEX"
+    yfinance: "^BSESN"
+    twelvedata: { symbol: "SENSEX", exchange: "BSE" }
+    groww: { exchange: BSE, segment: CASH, groww_symbol: "BSE-SENSEX" }
