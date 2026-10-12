@@ -49,3 +49,21 @@ def test_admin_switch_model(env, web):
     assert env.client.calls[-1]["model"] == "claude-opus-5-5"
     usage = a.get("/api/admin/usage").json()
     assert usage["by_model"][0]["model"] == "claude-opus-5-5"
+
+
+def test_production_requires_strong_admin_token(monkeypatch):
+    import pytest
+
+    from app import main
+    monkeypatch.setattr(main, "IS_PRODUCTION", True)
+    monkeypatch.delenv("ADMIN_TOKEN", raising=False)
+    with pytest.raises(RuntimeError, match="not set"):
+        main.check_production_config()
+    monkeypatch.setenv("ADMIN_TOKEN", "short")
+    with pytest.raises(RuntimeError, match="only 5 characters"):
+        main.check_production_config()
+    monkeypatch.setenv("ADMIN_TOKEN", "  " + "x" * 30 + "\n")       # pasted with whitespace
+    monkeypatch.setenv("SR_DATA_DIR", "/tmp")
+    monkeypatch.delenv("COOKIE_SECURE", raising=False)
+    main.check_production_config()
+    assert main._is_admin("x" * 30)

@@ -91,9 +91,13 @@ def check_production_config() -> None:
     """Refuse to start in production with settings that would expose data."""
     if not IS_PRODUCTION:
         return
-    token = os.environ.get("ADMIN_TOKEN", "")
+    token = _admin_token()
+    if not token:
+        raise RuntimeError("ADMIN_TOKEN is not set. Add it under the service's Variables in Railway "
+                           "(a random string of at least 24 characters) and redeploy.")
     if len(token) < 24:
-        raise RuntimeError("ADMIN_TOKEN must be set to a random string of at least 24 characters in production")
+        raise RuntimeError(f"ADMIN_TOKEN is only {len(token)} characters; it must be at least 24. Generate one with: "
+                           "python3 -c \"import secrets; print(secrets.token_urlsafe(32))\"")
     if os.environ.get("COOKIE_SECURE") == "0":
         raise RuntimeError("COOKIE_SECURE=0 is not allowed in production")
     if not (os.environ.get("SR_DATA_DIR") or os.environ.get("RAILWAY_VOLUME_MOUNT_PATH")):
@@ -152,7 +156,7 @@ def create_app(settings: Settings | None = None, service: RecommendationService 
 
     # ---- auth dependencies ------------------------------------------------
     def require_admin(request: Request, x_admin_token: str = Header(default="")) -> None:
-        if not os.environ.get("ADMIN_TOKEN"):
+        if not _admin_token():
             raise HTTPException(503, "ADMIN_TOKEN is not configured on the server")
         if _is_admin(x_admin_token):
             return
@@ -572,8 +576,14 @@ def _page(name: str):
     return handler
 
 
+def _admin_token() -> str:
+    # Strip whitespace/newlines that sneak in when pasting into a dashboard.
+    return os.environ.get("ADMIN_TOKEN", "").strip()
+
+
 def _is_admin(token: str) -> bool:
-    expected = os.environ.get("ADMIN_TOKEN", "")
+    expected = _admin_token()
+    token = (token or "").strip()
     return bool(expected) and bool(token) and hmac.compare_digest(token.encode(), expected.encode())
 
 
