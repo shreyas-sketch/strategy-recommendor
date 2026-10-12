@@ -42,7 +42,8 @@ class AISensyClient:
     def configured(self) -> bool:
         return bool(self.api_key)
 
-    def send(self, *, campaign: str, phone: str, user_name: str, params: list[str]) -> tuple[bool, str]:
+    def send(self, *, campaign: str, phone: str, user_name: str, params: list[str],
+             buttons: list[dict] | None = None) -> tuple[bool, str]:
         if not self.configured:
             return False, "AISENSY_API_KEY not set"
         if not campaign:
@@ -55,6 +56,8 @@ class AISensyClient:
             "templateParams": [_param(p) for p in params],
             "source": "strategy-recommender",
         }
+        if buttons:
+            body["buttons"] = buttons
         try:
             resp = requests.post(self.url, json=body, timeout=20)
         except requests.RequestException as exc:
@@ -63,6 +66,17 @@ class AISensyClient:
             return True, f"HTTP {resp.status_code}"
         # Never echo the request (it holds the API key); keep only the provider's message.
         return False, f"HTTP {resp.status_code}: {resp.text[:200]}"
+
+
+def send_login_code(client: "AISensyClient", campaign: str, phone: str, name: str, code: str) -> tuple[bool, str]:
+    """Send a WhatsApp login code. Authentication templates usually carry a "Copy code" URL button that
+    needs the code too; if the template has no button, AiSensy rejects that, so retry without it."""
+    button = [{"type": "button", "sub_type": "url", "index": 0, "parameters": [{"type": "text", "text": code}]}]
+    ok, detail = client.send(campaign=campaign, phone=phone, user_name=name, params=[code], buttons=button)
+    if ok or detail.startswith(("network error", "AISENSY_API_KEY", "AiSensy campaign")):
+        return ok, detail
+    ok2, detail2 = client.send(campaign=campaign, phone=phone, user_name=name, params=[code])
+    return ok2, detail2 if ok2 else f"{detail} | without button: {detail2}"
 
 
 def message_params(user: dict, payload: dict) -> list[str]:

@@ -69,6 +69,8 @@ class AdminSettings(BaseModel):
     notify_weekdays_only: bool = True
     market_holidays: list[Annotated[str, Field(pattern=r"^\d{4}-\d{2}-\d{2}$")]] = []  # IST dates, no message
     aisensy_campaign: str = ""
+    # AiSensy API campaign that sends the WhatsApp login code ({{1}} = code). Empty disables code login.
+    aisensy_otp_campaign: str = "hub_login_code_"
     # Index used as the market backdrop for portfolio recommendations.
     portfolio_benchmark: str = "NIFTY50"
 

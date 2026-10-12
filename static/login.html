@@ -11,19 +11,31 @@
 <main class="wrap narrow">
   <section class="card">
     <h2>Sign in</h2>
+    <div id="error" class="error hidden" style="margin-bottom:12px"></div>
     <div id="google-box" class="hidden">
       <a class="google-btn" href="/auth/google/start">Sign in with Google</a>
       <p class="or">or with your mobile number</p>
     </div>
+    <form id="code-form" class="hidden">
+      <label for="code-phone">Mobile number</label>
+      <input id="code-phone" type="tel" autocomplete="tel" required placeholder="98XXXXXXXX" class="block">
+      <div id="code-step" class="hidden">
+        <label for="code" style="margin-top:12px">6-digit code from WhatsApp</label>
+        <input id="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="\d{6}" class="block">
+      </div>
+      <div id="code-msg" class="notice hidden" style="margin-top:12px"></div>
+      <button class="primary block" id="code-btn" style="margin-top:16px">Get a WhatsApp code</button>
+      <p class="small" style="margin:10px 0 0"><a href="#" id="use-password">Sign in with a password instead</a></p>
+    </form>
     <form id="login-form">
       <label for="phone">Mobile number</label>
       <input id="phone" type="tel" autocomplete="username" required placeholder="98XXXXXXXX" class="block">
       <label for="password" style="margin-top:12px">Password</label>
       <input id="password" type="password" autocomplete="current-password" required class="block">
-      <div id="error" class="error hidden" style="margin-top:12px"></div>
       <button class="primary block" style="margin-top:16px">Sign in</button>
+      <p class="small hidden" id="use-code-wrap" style="margin:10px 0 0"><a href="#" id="use-code">Get a code on WhatsApp instead</a></p>
     </form>
-    <p class="muted small">Use "Sign in with Google" if the admin registered your Gmail address. Otherwise use the invite link the admin sent you; forgot your password? Ask the admin for a new invite link.</p>
+    <p class="muted small">Registered with your mobile number? Get a one-time code on WhatsApp. Registered with Gmail? Use "Sign in with Google". Not receiving a code? Ask the admin to check your number.</p>
   </section>
 </main>
 <script src="/static/common.js"></script>

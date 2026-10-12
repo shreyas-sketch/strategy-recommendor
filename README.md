@@ -24,7 +24,7 @@ pip install -r requirements-dev.txt
 cp .env.example .env            # fill in ANTHROPIC_API_KEY, ADMIN_TOKEN, …
 echo "COOKIE_SECURE=0" >> .env  # local http only
 uvicorn app.main:app --reload
-pytest                          # 95 tests
+pytest                          # 102 tests
 ```
 
 * Admin: http://localhost:8000/admin (sign in with `ADMIN_TOKEN`)
@@ -65,8 +65,11 @@ warning if no volume is attached. API docs (`/docs`) are disabled in production.
 **Participants.** Add each person with a Google email, a WhatsApp number, or both.
 * **Google email:** they open the site and click "Sign in with Google". Only pre-approved
   emails get in; anyone else is told to ask the admin.
-* **Phone:** they get a one-time invite link to set a password, then sign in with
-  mobile + password. WhatsApp messages need a phone number.
+* **Phone:** they enter their mobile number, get a 6-digit **WhatsApp code** through the
+  AiSensy login-code campaign (default `hub_login_code_`; Admin → WhatsApp), and they're in.
+  Codes expire in 5 minutes, work once, lock after 5 wrong tries, and are rate-limited.
+  The form never reveals whether a number is registered. They can also use an invite
+  link to set a password. WhatsApp messages need a phone number.
 
 **Setting up Google sign-in (one time, free):**
 1. Go to Google Cloud Console → create a project → **APIs & Services → OAuth consent

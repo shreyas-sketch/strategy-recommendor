@@ -37,6 +37,12 @@ CREATE TABLE IF NOT EXISTS users (
     last_login TEXT,
     profile TEXT
 );
+CREATE TABLE IF NOT EXISTS login_codes (
+    user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    code_hash TEXT NOT NULL,
+    expires REAL NOT NULL,
+    attempts INTEGER NOT NULL DEFAULT 0
+);
 CREATE TABLE IF NOT EXISTS admins (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     email TEXT NOT NULL UNIQUE,
@@ -294,6 +300,25 @@ class Store:
 
     def delete_user_sessions(self, user_id: int) -> None:
         self._write("DELETE FROM sessions WHERE user_id = ?", (user_id,))
+
+    # ---- WhatsApp login codes -------------------------------------------------
+    def put_login_code(self, user_id: int, code_hash: str, ttl_s: float) -> None:
+        self._write("INSERT OR REPLACE INTO login_codes (user_id, code_hash, expires, attempts) VALUES (?,?,?,0)",
+                    (user_id, code_hash, time.time() + ttl_s))
+
+    def check_login_code(self, user_id: int, code_hash: str, max_attempts: int) -> bool:
+        """Constant-time check; a code works once, expires, and locks after max_attempts wrong tries."""
+        import hmac as _hmac
+        with self._lock, self._conn:
+            row = self._conn.execute("SELECT code_hash, expires, attempts FROM login_codes WHERE user_id = ?",
+                                     (user_id,)).fetchone()
+            if not row or row["expires"] < time.time() or row["attempts"] >= max_attempts:
+                return False
+            if _hmac.compare_digest(row["code_hash"], code_hash):
+                self._conn.execute("DELETE FROM login_codes WHERE user_id = ?", (user_id,))
+                return True
+            self._conn.execute("UPDATE login_codes SET attempts = attempts + 1 WHERE user_id = ?", (user_id,))
+            return False
 
     # ---- admin accounts -----------------------------------------------------
     def create_admin(self, email: str, role: str, name: str = "", password_hash: str | None = None) -> int:

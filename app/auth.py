@@ -47,6 +47,14 @@ def validate_password(password: str) -> None:
         raise ValueError("Password is too long")
 
 
+_CODE_PEPPER = secrets.token_bytes(32)   # per-process: pending codes simply expire on restart
+
+
+def code_digest(value: str) -> str:
+    """Keyed hash for short-lived login codes (6-digit codes are too small for a plain hash)."""
+    return hmac.new(_CODE_PEPPER, value.encode(), hashlib.sha256).hexdigest()
+
+
 def new_token() -> str:
     return secrets.token_urlsafe(32)
 

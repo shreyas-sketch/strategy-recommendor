@@ -119,7 +119,8 @@
         <label class="switch-row"><input type="checkbox" id="n-weekdays"> Weekdays only</label>
       </div>
       <div class="row" style="margin-top:12px">
-        <div><label for="n-campaign">AiSensy API campaign name</label><input id="n-campaign" size="28"></div>
+        <div><label for="n-campaign">Daily message campaign</label><input id="n-campaign" size="24"></div>
+        <div><label for="n-otp">Login-code campaign</label><input id="n-otp" size="20" placeholder="hub_login_code_"></div>
         <div><label for="n-bench">Benchmark index</label><input id="n-bench" size="12"></div>
         <div style="flex:1;min-width:220px"><label for="n-holidays">Market holidays (YYYY-MM-DD, one per line)</label><textarea id="n-holidays" rows="2"></textarea></div>
       </div>
@@ -127,10 +128,12 @@
         <button class="primary" id="n-save">Save notification settings</button>
         <input id="n-test-phone" placeholder="Test number" size="16">
         <button id="n-test">Send test message</button>
+        <button id="n-test-code">Send test login code</button>
         <button id="n-prepare">Prepare today's picks now</button>
         <button id="n-send">Send today's messages now</button>
       </div>
-      <p class="muted small">Template params sent in order: {{1}} first name · {{2}} strategy · {{3}} instrument · {{4}} one-line reason.</p>
+      <p class="muted small">Daily message params: {{1}} first name · {{2}} strategy · {{3}} instrument · {{4}} one-line reason.
+        Login code: {{1}} = the 6-digit code (also sent to a "Copy code" button if the template has one). Clear the login-code campaign to switch WhatsApp code login off.</p>
       <details><summary>Delivery log &amp; job runs</summary>
         <div class="table-scroll"><table id="n-log"></table></div>
         <div class="table-scroll" style="margin-top:10px"><table id="n-jobs"></table></div>

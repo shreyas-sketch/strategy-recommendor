@@ -197,7 +197,7 @@ $("exp-refresh").onclick = async (e) => {
 async function loadNotifications() {
   const n = await api("/api/admin/notifications");
   $("n-enabled").checked = n.enabled; $("n-time").value = n.notify_time; $("n-lead").value = n.prepare_lead_minutes;
-  $("n-weekdays").checked = n.weekdays_only; $("n-campaign").value = n.campaign; $("n-holidays").value = n.holidays.join("\n");
+  $("n-weekdays").checked = n.weekdays_only; $("n-campaign").value = n.campaign; $("n-otp").value = n.otp_campaign || ""; $("n-holidays").value = n.holidays.join("\n");
   const warn = !n.aisensy_configured ? "AISENSY_API_KEY is not set on the server. " : !n.campaign ? "Set the AiSensy campaign name. " : "";
   $("notify-status").innerHTML = `${warn ? `<span class="pill avoid">${esc(warn)}</span> ` : ""}${n.opted_in} participant(s) opted in · ${n.enabled ? `sends daily at ${esc(n.notify_time)} IST` : "currently off"}`;
   $("n-log").innerHTML = `<tr><th>Time</th><th>Participant</th><th>Status</th><th>Detail</th></tr>` +
@@ -208,12 +208,18 @@ async function loadNotifications() {
 $("n-save").onclick = (e) => save({
   notify_enabled: $("n-enabled").checked, notify_time: $("n-time").value, prepare_lead_minutes: Number($("n-lead").value || 0),
   notify_weekdays_only: $("n-weekdays").checked, aisensy_campaign: $("n-campaign").value.trim(),
+  aisensy_otp_campaign: $("n-otp").value.trim(),
   portfolio_benchmark: $("n-bench").value.trim().toUpperCase() || "NIFTY50",
   market_holidays: $("n-holidays").value.split(/\s+/).map((x) => x.trim()).filter(Boolean),
 }, e.target);
 $("n-test").onclick = async () => {
   try { const r = await api("/api/admin/notifications/test", { method: "POST", body: JSON.stringify({ phone: $("n-test-phone").value }) });
         alert(r.ok ? "Sent. Check the phone." : `Failed: ${r.detail}`); await loadNotifications(); }
+  catch (err) { showError(err); }
+};
+$("n-test-code").onclick = async () => {
+  try { const r = await api("/api/admin/notifications/test-code", { method: "POST", body: JSON.stringify({ phone: $("n-test-phone").value }) });
+        alert(r.ok ? "Test code 123456 sent. Check WhatsApp." : `Failed: ${r.detail}`); await loadNotifications(); }
   catch (err) { showError(err); }
 };
 for (const kind of ["prepare", "send"]) {

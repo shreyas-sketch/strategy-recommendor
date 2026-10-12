@@ -173,7 +173,7 @@ def test_google_not_configured(web, monkeypatch):
     monkeypatch.delenv("GOOGLE_CLIENT_ID", raising=False)
     r = client(web.app).get("/auth/google/start")
     assert r.headers["location"] == "/login?error=google_not_configured"
-    assert client(web.app).get("/api/auth/config").json() == {"google": False}
+    assert client(web.app).get("/api/auth/config").json()["google"] is False
 
 
 # ---- participants with optional phone/email ------------------------------------

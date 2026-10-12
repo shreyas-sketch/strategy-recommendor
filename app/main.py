@@ -19,7 +19,7 @@ from pydantic import BaseModel, ValidationError
 from . import auth, oauth
 from .config import IS_PRODUCTION, ROOT, AdminSettings, Horizon, Settings, Strategy
 from .data.base import ProviderError
-from .notify import AISensyClient, DailyJobs, scheduler_loop
+from .notify import AISensyClient, DailyJobs, scheduler_loop, send_login_code
 from .portfolio import TEMPLATE_CSV, GrowwIsinResolver, PortfolioAdvisor, PortfolioError, parse_portfolio
 from .profile import TradingProfile, apply_profile, split
 from .expiries import ExpiryCalendar
@@ -88,6 +88,15 @@ class ParticipantPatch(BaseModel):
     name: str | None = None
     phone: str | None = None
     email: str | None = None
+
+
+class CodeRequest(BaseModel):
+    phone: str
+
+
+class CodeVerify(BaseModel):
+    phone: str
+    code: str
 
 
 class AdminLogin(BaseModel):
@@ -278,6 +287,56 @@ def create_app(settings: Settings | None = None, service: RecommendationService 
         store.update_user(user_id, password_hash=auth.hash_password(req.password))
         store.delete_user_sessions(user_id)
         set_session(response, user_id)
+        return {"ok": True}
+
+    # ---- participant: WhatsApp login code (AiSensy) -------------------------
+    code_limiter = auth.RateLimiter(3, 15 * 60)       # codes sent per phone
+    code_ip_limiter = auth.RateLimiter(10, 15 * 60)   # code requests per IP
+    CODE_TTL_S, CODE_MAX_ATTEMPTS = 300, 5
+
+    def code_login_enabled() -> bool:
+        return jobs.aisensy.configured and bool(settings.admin.aisensy_otp_campaign)
+
+    def _code_hash(user_id: int, code: str) -> str:
+        return auth.code_digest(f"{user_id}:{code}")
+
+    @app.post("/api/auth/code/request")
+    def request_code(req: CodeRequest, request: Request):
+        if not code_login_enabled():
+            raise HTTPException(503, "WhatsApp code login is not available yet — use another sign-in option")
+        try:
+            phone = auth.normalize_phone(req.phone)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc))
+        if not code_ip_limiter.hit(client_ip(request)) or not code_limiter.hit(phone):
+            raise HTTPException(429, "Too many codes requested. Wait 15 minutes and try again.")
+        user = store.get_user_by_phone(phone)
+        # Same answer whether or not the number is registered, so the form can't be used to probe numbers.
+        if user and user["active"]:
+            code = f"{auth.secrets.randbelow(1_000_000):06d}"
+            store.put_login_code(user["id"], _code_hash(user["id"], code), CODE_TTL_S)
+            ok, detail = send_login_code(jobs.aisensy, settings.admin.aisensy_otp_campaign, phone, user["name"], code)
+            store.log_notification(user["id"], today_ist(), "code-sent" if ok else "code-failed", detail)
+            if not ok:
+                log.warning("login code send failed for %s: %s", auth.mask_phone(phone), detail)
+        return {"ok": True, "message": "If this number is registered, a 6-digit code is on its way on WhatsApp. "
+                                       "It expires in 5 minutes."}
+
+    @app.post("/api/auth/code/verify")
+    def verify_code(req: CodeVerify, request: Request, response: Response):
+        if not login_limiter.hit(f"ip:{client_ip(request)}"):
+            raise HTTPException(429, "Too many attempts. Try again in 15 minutes.")
+        try:
+            phone = auth.normalize_phone(req.phone)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc))
+        code = re.sub(r"\D", "", req.code or "")
+        user = store.get_user_by_phone(phone)
+        if not (user and user["active"] and len(code) == 6
+                and store.check_login_code(user["id"], _code_hash(user["id"], code), CODE_MAX_ATTEMPTS)):
+            raise HTTPException(401, "That code is wrong or has expired. Request a new one.")
+        store.update_user(user["id"], last_login=today_ist())
+        set_session(response, user["id"])
         return {"ok": True}
 
     # ---- participant: self ------------------------------------------------
@@ -497,7 +556,7 @@ def create_app(settings: Settings | None = None, service: RecommendationService 
 
     @app.get("/api/auth/config")
     def auth_config():
-        return {"google": oauth.configured()}
+        return {"google": oauth.configured(), "whatsapp_code": code_login_enabled()}
 
     @app.get("/auth/google/start", include_in_schema=False)
     def google_start(request: Request, role: str = "participant"):
@@ -759,8 +818,21 @@ def create_app(settings: Settings | None = None, service: RecommendationService 
         return {"aisensy_configured": jobs.aisensy.configured, "enabled": a.notify_enabled,
                 "notify_time": a.notify_time, "prepare_lead_minutes": a.prepare_lead_minutes,
                 "weekdays_only": a.notify_weekdays_only, "holidays": a.market_holidays,
-                "campaign": a.aisensy_campaign, "opted_in": len(store.opted_in_users()),
+                "campaign": a.aisensy_campaign, "otp_campaign": a.aisensy_otp_campaign,
+                "opted_in": len(store.opted_in_users()),
                 "recent": store.recent_notifications(), "jobs": store.recent_jobs()}
+
+    @app.post("/api/admin/notifications/test-code", dependencies=[Depends(require_master)])
+    def test_login_code(phone: str = Body(..., embed=True)):
+        try:
+            phone = auth.normalize_phone(phone)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc))
+        if not settings.admin.aisensy_otp_campaign:
+            raise HTTPException(409, "Set the login-code campaign name first")
+        ok, detail = send_login_code(jobs.aisensy, settings.admin.aisensy_otp_campaign, phone, "Admin test", "123456")
+        store.log_notification(None, today_ist(), "test-code-sent" if ok else "test-code-failed", detail)
+        return {"ok": ok, "detail": detail}
 
     @app.post("/api/admin/notifications/test", dependencies=[Depends(require_master)])
     def notification_test(phone: str = Body(..., embed=True)):
