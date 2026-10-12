@@ -10,41 +10,40 @@ horizons:
 - 1w
 description: Short straddle / premium selling on NIFTY 50, SENSEX (intraday) using Supertrend.
 logic: "Style: Short straddle / premium selling on NIFTY 50, SENSEX.\nIntraday: everything is closed by 15:24 IST.\n\
-  Trades only on expiry day and the day before.\nIndicators\
-  \ used: Supertrend.\nPosition size varies by set: 2 set(s) with 1 lot(s) per leg, 2 set(s) with 2 lot(s) per leg.\n\
-  Capital required (per Tradetron): ₹600,000.\n\nSet 1:\n  Entry when the time is at or after 09:16 AND close of\
-  \ combined premium of NIFTY 50 current week ATM CE + NIFTY 50 current week ATM PE (1m candles) on the last completed\
-  \ candle is below Supertrend(8, 2) of combined premium of NIFTY 50 current week ATM CE + NIFTY 50 current week\
-  \ ATM PE (1m candles) on the last completed candle AND days from today to the NIFTY 50 current weekly expiry equals\
-  \ 0.\n    -> SELL 1 lot NIFTY 50 CE ATM strike (spot-based) (current week expiry, NRML)\n    -> SELL 1 lot NIFTY\
-  \ 50 PE ATM strike (spot-based) (current week expiry, NRML)\n  Exit when close of combined premium of the traded\
-  \ leg 1 of set 1 + the traded leg 2 of set 1 (1m candles) on the last completed candle is above Supertrend(8,\
-  \ 2) of combined premium of the traded leg 1 of set 1 + the traded leg 2 of set 1 (1m candles) on the last completed\
-  \ candle.\n\nSet 2:\n  Entry when the time is at or after 09:16 AND close of combined premium of NIFTY 50 current\
-  \ week ATM CE + NIFTY 50 current week ATM PE (1m candles) on the last completed candle is below Supertrend(8,\
-  \ 2) of combined premium of NIFTY 50 current week ATM CE + NIFTY 50 current week ATM PE (1m candles) on the last\
-  \ completed candle AND days from today to the NIFTY 50 current weekly expiry equals 1.\n    -> SELL 2 lots NIFTY\
-  \ 50 CE ATM strike (spot-based) (current week expiry, NRML)\n    -> SELL 2 lots NIFTY 50 PE ATM strike (spot-based)\
-  \ (current week expiry, NRML)\n  Exit when close of combined premium of the traded leg 1 of set 2 + the traded\
-  \ leg 2 of set 2 (1m candles) on the last completed candle is above Supertrend(8, 2) of combined premium of the\
-  \ traded leg 1 of set 2 + the traded leg 2 of set 2 (1m candles) on the last completed candle.\n\nSet 3:\n  Entry\
-  \ when the time is at or after 09:16 AND close of combined premium of SENSEX current week ATM CE + SENSEX current\
-  \ week ATM PE (1m candles) on the last completed candle is below Supertrend(8, 2) of combined premium of SENSEX\
-  \ current week ATM CE + SENSEX current week ATM PE (1m candles) on the last completed candle AND the weekday number\
-  \ equals 4 AND today equals the SENSEX current weekly expiry.\n    -> SELL 1 lot SENSEX CE ATM strike (spot-based)\
-  \ (current week expiry, NRML)\n    -> SELL 1 lot SENSEX PE ATM strike (spot-based) (current week expiry, NRML)\n\
-  \  Exit when close of combined premium of the traded leg 1 of set 3 + the traded leg 2 of set 3 (1m candles) on\
-  \ the last completed candle is above Supertrend(8, 2) of combined premium of the traded leg 1 of set 3 + the traded\
-  \ leg 2 of set 3 (1m candles) on the last completed candle.\n\nSet 4:\n  Entry when the time is at or after 09:16\
-  \ AND close of combined premium of SENSEX current week ATM CE + SENSEX current week ATM PE (1m candles) on the\
-  \ last completed candle is below Supertrend(8, 2) of combined premium of SENSEX current week ATM CE + SENSEX current\
-  \ week ATM PE (1m candles) on the last completed candle AND days from today to the SENSEX current weekly expiry\
-  \ equals 1 AND the weekday number equals 3.\n    -> SELL 2 lots SENSEX CE ATM strike (spot-based) (current week\
-  \ expiry, NRML)\n    -> SELL 2 lots SENSEX PE ATM strike (spot-based) (current week expiry, NRML)\n  Exit when\
-  \ close of combined premium of the traded leg 1 of set 4 + the traded leg 2 of set 4 (1m candles) on the last\
-  \ completed candle is above Supertrend(8, 2) of combined premium of the traded leg 1 of set 4 + the traded leg\
-  \ 2 of set 4 (1m candles) on the last completed candle.\n\nAll sets:\n  Exit everything when the time is after\
-  \ 15:24."
+  Trades only on expiry day and the day before.\nIndicators used: Supertrend.\nPosition size varies by set: 2 set(s)\
+  \ with 1 lot(s) per leg, 2 set(s) with 2 lot(s) per leg.\nCapital required (per Tradetron): ₹600,000.\n\nSet 1:\n\
+  \  Entry when the time is at or after 09:16 AND close of combined premium of NIFTY 50 current week ATM CE + NIFTY\
+  \ 50 current week ATM PE (1m candles) on the last completed candle is below Supertrend(8, 2) of combined premium\
+  \ of NIFTY 50 current week ATM CE + NIFTY 50 current week ATM PE (1m candles) on the last completed candle AND\
+  \ days from today to the NIFTY 50 current weekly expiry equals 0.\n    -> SELL 1 lot NIFTY 50 CE ATM strike (spot-based)\
+  \ (current week expiry, NRML)\n    -> SELL 1 lot NIFTY 50 PE ATM strike (spot-based) (current week expiry, NRML)\n\
+  \  Exit when close of combined premium of the traded leg 1 of set 1 + the traded leg 2 of set 1 (1m candles) on\
+  \ the last completed candle is above Supertrend(8, 2) of combined premium of the traded leg 1 of set 1 + the traded\
+  \ leg 2 of set 1 (1m candles) on the last completed candle.\n\nSet 2:\n  Entry when the time is at or after 09:16\
+  \ AND close of combined premium of NIFTY 50 current week ATM CE + NIFTY 50 current week ATM PE (1m candles) on\
+  \ the last completed candle is below Supertrend(8, 2) of combined premium of NIFTY 50 current week ATM CE + NIFTY\
+  \ 50 current week ATM PE (1m candles) on the last completed candle AND days from today to the NIFTY 50 current\
+  \ weekly expiry equals 1.\n    -> SELL 2 lots NIFTY 50 CE ATM strike (spot-based) (current week expiry, NRML)\n\
+  \    -> SELL 2 lots NIFTY 50 PE ATM strike (spot-based) (current week expiry, NRML)\n  Exit when close of combined\
+  \ premium of the traded leg 1 of set 2 + the traded leg 2 of set 2 (1m candles) on the last completed candle is\
+  \ above Supertrend(8, 2) of combined premium of the traded leg 1 of set 2 + the traded leg 2 of set 2 (1m candles)\
+  \ on the last completed candle.\n\nSet 3:\n  Entry when the time is at or after 09:16 AND close of combined premium\
+  \ of SENSEX current week ATM CE + SENSEX current week ATM PE (1m candles) on the last completed candle is below\
+  \ Supertrend(8, 2) of combined premium of SENSEX current week ATM CE + SENSEX current week ATM PE (1m candles)\
+  \ on the last completed candle AND the weekday number equals 4 AND today equals the SENSEX current weekly expiry.\n\
+  \    -> SELL 1 lot SENSEX CE ATM strike (spot-based) (current week expiry, NRML)\n    -> SELL 1 lot SENSEX PE\
+  \ ATM strike (spot-based) (current week expiry, NRML)\n  Exit when close of combined premium of the traded leg\
+  \ 1 of set 3 + the traded leg 2 of set 3 (1m candles) on the last completed candle is above Supertrend(8, 2) of\
+  \ combined premium of the traded leg 1 of set 3 + the traded leg 2 of set 3 (1m candles) on the last completed\
+  \ candle.\n\nSet 4:\n  Entry when the time is at or after 09:16 AND close of combined premium of SENSEX current\
+  \ week ATM CE + SENSEX current week ATM PE (1m candles) on the last completed candle is below Supertrend(8, 2)\
+  \ of combined premium of SENSEX current week ATM CE + SENSEX current week ATM PE (1m candles) on the last completed\
+  \ candle AND days from today to the SENSEX current weekly expiry equals 1 AND the weekday number equals 3.\n \
+  \   -> SELL 2 lots SENSEX CE ATM strike (spot-based) (current week expiry, NRML)\n    -> SELL 2 lots SENSEX PE\
+  \ ATM strike (spot-based) (current week expiry, NRML)\n  Exit when close of combined premium of the traded leg\
+  \ 1 of set 4 + the traded leg 2 of set 4 (1m candles) on the last completed candle is above Supertrend(8, 2) of\
+  \ combined premium of the traded leg 1 of set 4 + the traded leg 2 of set 4 (1m candles) on the last completed\
+  \ candle.\n\nAll sets:\n  Exit everything when the time is after 15:24."
 ideal_conditions:
   trend:
   - sideways
@@ -62,10 +61,10 @@ risk_notes: 'Naked short options: losses are open-ended on a large move; margin-
 risk_level: high
 min_capital_inr: 600000
 min_experience: advanced
-active_days: expiry_and_day_before
 underlyings:
 - NIFTY50
 - SENSEX
+active_days: expiry_and_day_before
 source:
   format: tt-strategy/v2
   original_name: Atm Roll Aggressive Diversified-Kapoor

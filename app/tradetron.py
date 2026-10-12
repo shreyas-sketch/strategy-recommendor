@@ -152,6 +152,16 @@ def _parse_condition(cond: dict) -> str:
     return cond.get("conditionDisplay") or cond.get("conditionValue") or ""
 
 
+def _moneyness(opt: str, strike_expr: str) -> str:
+    """'tt_ATM_SPOT ( 'NIFTY BANK', '2' )' on a PE -> '2 strikes in the money'. Calls: + is OTM; puts: + is ITM."""
+    m = re.search(r"tt_ATM(?:_SPOT|_FUT)?\s*\(\s*'[^']+'\s*,\s*'(-?\d+)'", strike_expr)
+    if not m or opt not in ("CE", "PE") or int(m.group(1)) == 0:
+        return ""
+    n = int(m.group(1))
+    itm = (n < 0) if opt == "CE" else (n > 0)
+    return f"{abs(n)} strike{'s' if abs(n) != 1 else ''} {'in' if itm else 'out of'} the money"
+
+
 def describe_leg(leg: dict) -> str:
     side = {"B": "BUY", "S": "SELL"}.get(leg.get("buySell"), leg.get("buySell") or "?")
     lots = leg.get("qtyDisplay") or "?"
@@ -168,6 +178,9 @@ def describe_leg(leg: dict) -> str:
     else:
         strike = leg.get("strikeDisplay") or leg.get("strike") or ""
     instrument = f"{opt} {strike}".strip() if opt in ("CE", "PE") else (opt or "futures/stock")
+    moneyness = _moneyness(opt, leg.get("strike") or "")
+    if moneyness:
+        instrument += f" = {moneyness}"
     expiry = (leg.get("expiryType") or "").lower()
     product = {"MIS": "intraday (MIS)", "NRML": "NRML"}.get(leg.get("productType"), leg.get("productType") or "")
     extras = [x for x in (f"{expiry} expiry" if expiry else "", product) if x]
@@ -180,8 +193,10 @@ def describe_leg(leg: dict) -> str:
 # Classification and suggestions
 # ---------------------------------------------------------------------------
 def _slug(name: str) -> str:
-    s = re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")
-    return (s or "strategy")[:40].rstrip("_")
+    s = re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_") or "strategy"
+    if len(s) > 40:                       # cut at a word boundary, not mid-word
+        s = s[:41].rsplit("_", 1)[0] if "_" in s[:41] else s[:40]
+    return s.rstrip("_")
 
 
 def _intraday_exit(sets: list[dict]) -> str | None:
@@ -322,6 +337,9 @@ def analyse(data: dict) -> dict:
         facts.append("Position size varies by set: " + ", ".join(f"{n} set(s) with {q} lot(s) per leg" for q, n in lots.items()) + ".")
     if capital:
         facts.append(f"Capital required (per Tradetron): ₹{capital:,}.")
+    tags = [t.get("label") for t in data.get("tags") or [] if isinstance(t, dict) and t.get("label")]
+    if tags:
+        facts.append("Tradetron tags: " + ", ".join(tags) + ".")
     if uses_runtime:
         keys = sorted(set(re.findall(r"get_runtime \( 'strategy_id', 'run_counter', '([^']+)' \)", json.dumps(data))))
         warnings.append("Entry/exit signals come from runtime variables set outside this export "

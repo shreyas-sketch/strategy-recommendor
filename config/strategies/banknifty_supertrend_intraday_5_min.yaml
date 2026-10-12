@@ -1,0 +1,51 @@
+# Imported from Tradetron export "Banknifty Supertrend Intraday 5 min delay selling ITM".
+# Ideal conditions, risk level and experience were suggested from the strategy's structure — review them.
+id: banknifty_supertrend_intraday_5_min
+name: Banknifty Supertrend Intraday 5 min delay selling ITM
+category: trend
+instruments:
+- options
+horizons:
+- 1d
+- 1w
+description: 'Directional in-the-money option selling on NIFTY BANK (intraday): 5-min Supertrend(10,3) — sells an
+  ITM put in uptrends and an ITM call in downtrends.'
+logic: "Style: Directional option selling on NIFTY BANK.\nIntraday: everything is closed by 15:15 IST.\nIndicators\
+  \ used: Supertrend.\nCapital required (per Tradetron): ₹225,000.\nTradetron tags: EarnTheta, ShortVol, Directional,\
+  \ Positional.\n\nSet 1:\n  Entry when close of NIFTY BANK (spot/index) 5m candles on the last completed candle\
+  \ is above Supertrend(10, 3) of NIFTY BANK (spot/index) 5m candles on the last completed candle AND the time is\
+  \ at or after 09:20.\n    -> SELL 1 lot NIFTY BANK PE ATM+2 strike (spot-based) = 2 strikes in the money (current\
+  \ month expiry, intraday (MIS))\n  Exit when close of NIFTY BANK (spot/index) 5m candles on the last completed\
+  \ candle is below Supertrend(10, 3) of NIFTY BANK (spot/index) 5m candles on the last completed candle AND the\
+  \ time is at or after 09:20.\n\nSet 2:\n  Entry when close of NIFTY BANK (spot/index) 5m candles on the last completed\
+  \ candle is below Supertrend(10, 3) of NIFTY BANK (spot/index) 5m candles on the last completed candle AND the\
+  \ time is at or after 09:20.\n    -> SELL 1 lot NIFTY BANK CE ATM-2 strike (spot-based) = 2 strikes in the money\
+  \ (current month expiry, intraday (MIS))\n  Exit when close of NIFTY BANK (spot/index) 5m candles on the last\
+  \ completed candle is above Supertrend(10, 3) of NIFTY BANK (spot/index) 5m candles on the last completed candle\
+  \ AND the time is at or after 09:20.\n\nAll sets:\n  Exit everything when the time is at or after 15:15."
+ideal_conditions:
+  trend:
+  - up
+  - down
+  trend_strength:
+  - moderate
+  - strong
+  volatility:
+  - normal
+  - high
+  squeeze: any
+avoid_conditions:
+- Sharp reversals against the position
+- Choppy days that flip the signal repeatedly
+risk_notes: 'Sells naked options in the trend direction: collects premium but a fast reversal causes large losses.'
+risk_level: high
+min_capital_inr: 225000
+min_experience: advanced
+underlyings:
+- BANKNIFTY
+active_days: any
+source:
+  format: tt-strategy/v2
+  original_name: Banknifty Supertrend Intraday 5 min delay selling ITM
+  sha256: 3aa1dec811bb2b1f48a53b9f0bc19967a855d507e7e9baeb645624ddbe6127b9
+  imported: '2026-10-12'

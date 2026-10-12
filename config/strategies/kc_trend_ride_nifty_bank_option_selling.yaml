@@ -40,6 +40,7 @@ min_capital_inr: 100000
 min_experience: advanced
 underlyings:
 - BANKNIFTY
+active_days: any
 source:
   format: tt-strategy/v2
   original_name: KC Trend ride Nifty Bank option selling intraday

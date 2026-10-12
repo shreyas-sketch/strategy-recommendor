@@ -24,7 +24,7 @@ pip install -r requirements-dev.txt
 cp .env.example .env            # fill in ANTHROPIC_API_KEY, ADMIN_TOKEN, …
 echo "COOKIE_SECURE=0" >> .env  # local http only
 uvicorn app.main:app --reload
-pytest                          # 105 tests
+pytest                          # 109 tests
 ```
 
 * Admin: http://localhost:8000/admin (sign in with `ADMIN_TOKEN`)
@@ -252,10 +252,19 @@ With Groww keys set, the app fetches each index's F&O expiry dates from Groww's
 
 ### Shipped strategies
 
-The three Tradetron strategies (BNF Supertrend, ATM Roll, KC Trend ride) are seeded on
-first start. The earlier generic examples are in `config/strategies/examples/`
-for reference (not loaded). Edit strategies in the admin panel (stored on the volume as
-YAML), or copy `config/strategies/_TEMPLATE.yaml`.
+Four Tradetron strategies ship with the app:
+* **BNF 15 min Supertrend:** buys out-of-the-money options.
+* **Banknifty Supertrend 5 min:** sells in-the-money options.
+* **ATM Roll:** NIFTY/SENSEX expiry-day straddle selling.
+* **KC Trend ride:** Bank Nifty directional selling.
+
+Each shipped file is added to the volume **once**:
+* A fresh deployment gets all of them.
+* A newly shipped strategy also appears on an existing deployment at the next deploy.
+* A strategy you deleted or edited in the admin panel is never brought back or overwritten.
+
+This is tracked in `strategies/.seeded.json` on the volume. The earlier generic examples
+are in `config/strategies/examples/` (not loaded).
 
 ## Market data
 

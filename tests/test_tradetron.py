@@ -130,3 +130,15 @@ def test_options_list_only_traded_indices(env, web):
     assert [i["key"] for i in opts["instruments"]] == ["NIFTY50", "BANKNIFTY", "SENSEX"]
     bank = next(i for i in opts["instruments"] if i["key"] == "BANKNIFTY")
     assert len(bank["strategies"]) == 2
+
+
+def test_itm_seller_and_moneyness_labels():
+    d = draft("bnf_supertrend_5m_sell_itm")["draft"]
+    assert d["underlyings"] == ["BANKNIFTY"] and d["risk_level"] == "high" and d["min_capital_inr"] == 225000
+    assert "SELL 1 lot NIFTY BANK PE ATM+2 strike (spot-based) = 2 strikes in the money" in d["logic"]
+    assert "SELL 1 lot NIFTY BANK CE ATM-2 strike (spot-based) = 2 strikes in the money" in d["logic"]
+    assert "Supertrend(10, 3)" in d["logic"] and "5m candles" in d["logic"] and "Tradetron tags: EarnTheta" in d["logic"]
+    assert d["id"] == "banknifty_supertrend_intraday_5_min"              # cut at a word boundary
+    buyer = draft("bnf_supertrend")["draft"]["logic"]
+    assert "CE ATM+2 strike (spot-based) = 2 strikes out of the money" in buyer
+    assert "PE ATM-2 strike (spot-based) = 2 strikes out of the money" in buyer

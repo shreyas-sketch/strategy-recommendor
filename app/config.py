@@ -159,12 +159,35 @@ class Settings:
         return self.data_dir / "strategies"
 
     def _seed_strategies(self) -> None:
-        if self.strategy_dir.exists():
-            return
-        self.strategy_dir.mkdir(parents=True)
-        for path in (self.config_dir / "strategies").glob("*.y*ml"):
-            shutil.copy2(path, self.strategy_dir / path.name)
-        log.info("seeded strategies into %s", self.strategy_dir)
+        """Copy shipped strategies into the data dir. Each shipped file is added once: new ones also
+        reach existing deployments, but a strategy the admin deleted is not brought back."""
+        fresh = not self.strategy_dir.exists()
+        self.strategy_dir.mkdir(parents=True, exist_ok=True)
+        manifest = self.strategy_dir / ".seeded.json"
+        if manifest.exists():
+            seeded = set(json.loads(manifest.read_text()))
+        elif fresh:
+            seeded = set()
+        else:  # volume from before the manifest existed: whatever is there counts as already seeded
+            seeded = {p.name for p in self.strategy_dir.glob("*.y*ml")}
+        existing_ids = set()
+        for path in self.strategy_dir.glob("*.y*ml"):
+            try:
+                existing_ids.add((yaml.safe_load(path.read_text()) or {}).get("id"))
+            except (OSError, yaml.YAMLError):
+                pass
+        added = []
+        for path in sorted((self.config_dir / "strategies").glob("*.y*ml")):
+            if path.name in seeded:
+                continue
+            seeded.add(path.name)
+            sid = (yaml.safe_load(path.read_text()) or {}).get("id")
+            if path.name.startswith("_") or sid not in existing_ids:
+                shutil.copy2(path, self.strategy_dir / path.name)
+                added.append(path.name)
+        manifest.write_text(json.dumps(sorted(seeded), indent=1))
+        if added:
+            log.info("added shipped strategies to %s: %s", self.strategy_dir, ", ".join(added))
 
     def reload_strategies(self) -> dict[str, Strategy]:
         found: dict[str, Strategy] = {}

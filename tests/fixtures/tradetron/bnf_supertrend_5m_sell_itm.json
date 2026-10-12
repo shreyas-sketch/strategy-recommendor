@@ -1,0 +1,252 @@
+{
+  "_format": "tt-strategy/v2",
+  "_readme": {
+    "about": "Tradetron strategy export. Edit and re-import via the ASB Import button.",
+    "logic": "To change a condition's logic, edit its \"conditionJson\" (the AST). The \"conditionValue\"/\"conditionDisplay\" text is regenerated from it on import.",
+    "legs": "For a leg field that has a \"*Json\" (e.g. \"strikeJson\"), edit the JSON — its text form is regenerated on import. Fields with no \"*Json\" (e.g. \"qty\") are plain text: edit them directly.",
+    "structure": "Add/remove/duplicate legs, conditions or sets by editing the arrays.",
+    "do_not": "Do not add \"*_id\" foreign keys back. Lists referenced by id must be ones you own."
+  },
+  "name": "Banknifty Supertrend Intraday 5 min delay selling ITM",
+  "description": null,
+  "tags": [
+    {
+      "label": "EarnTheta",
+      "value": 10
+    },
+    {
+      "label": "ShortVol",
+      "value": 13
+    },
+    {
+      "label": "Directional",
+      "value": 26
+    },
+    {
+      "label": "Positional",
+      "value": 70
+    }
+  ],
+  "variables": [],
+  "sets": [
+    {
+      "list": 0,
+      "name": null,
+      "conditions": [
+        {
+          "type": "Entry",
+          "conditionValue": "( tt_get_element ( tt_CLOSE ( tt_get_data ( tt_get_instrument ( 'NFO,NIFTY BANK,,,,,' ) , '5m', 'All' )  ) , '-1' ) > tt_get_element ( tt_SUPERTREND ( tt_get_data ( tt_get_instrument ( 'NFO,NIFTY BANK,,,,,' ) , '5m', 'All' ) , '10', '3' ) , '-1' )  )  and ( tt_Time ( 'NSE' ) >= tt_Number ( '0920' )  )",
+          "conditionJson": "{\"operator\":\"and\",\"operands\":[{\"type\":\"rule\",\"value\":\"builder-basic_rule_0\",\"elements\":[{\"name\":\"Position\",\"kid\":4262,\"params\":[{\"type\":\"keyword\",\"keyword\":{\"name\":\"CLOSE\",\"kid\":7146,\"params\":[{\"type\":\"keyword\",\"keyword\":{\"name\":\"Symbol\",\"kid\":4332,\"params\":[{\"type\":\"keyword\",\"keyword\":{\"name\":\"Instrument Name\",\"kid\":2474,\"params\":[{\"type\":\"value\",\"value\":\"NFO,NIFTY BANK,,,,,\"}]}},{\"type\":\"value\",\"value\":\"5m\"},{\"type\":\"value\",\"value\":\"All\"}]}}]}},{\"type\":\"value\",\"value\":\"-1\"}]},{\"name\":\">\",\"params\":[]},{\"name\":\"Position\",\"kid\":1066,\"params\":[{\"type\":\"keyword\",\"keyword\":{\"name\":\"SUPERTREND\",\"kid\":1061,\"params\":[{\"type\":\"keyword\",\"keyword\":{\"name\":\"Symbol\",\"kid\":6427,\"params\":[{\"type\":\"keyword\",\"keyword\":{\"name\":\"Instrument Name\",\"kid\":6607,\"params\":[{\"type\":\"value\",\"value\":\"NFO,NIFTY BANK,,,,,\"}]}},{\"type\":\"value\",\"value\":\"5m\"},{\"type\":\"value\",\"value\":\"All\"}]}},{\"type\":\"value\",\"value\":\"10\"},{\"type\":\"value\",\"value\":\"3\"}]}},{\"type\":\"value\",\"value\":\"-1\"}]}]},{\"type\":\"rule\",\"value\":\"builder-basic_rule_1\",\"elements\":[{\"name\":\"Time\",\"kid\":8009,\"params\":[{\"type\":\"value\",\"value\":\"NSE\"}]},{\"name\":\">=\",\"params\":[]},{\"name\":\"Number\",\"kid\":6152,\"params\":[{\"type\":\"value\",\"value\":\"0920\"}]}]}]}",
+          "conditionDisplay": "( Position ( CLOSE ( Symbol ( Instrument Name ( 'NFO,NIFTY BANK,,,,,' ) , '5m', 'All' )  ) , '-1' ) > Position ( SUPERTREND ( Symbol ( Instrument Name ( 'NFO,NIFTY BANK,,,,,' ) , '5m', 'All' ) , '10', '3' ) , '-1' )  )  and ( Time ( 'NSE' ) >= Number ( '0920' )  )",
+          "subType": "None",
+          "visible": 1,
+          "legs": [
+            {
+              "instrument": 1854,
+              "list": 0,
+              "optionType": "PE",
+              "expiry": "tt_curr_monthexpiry('NIFTY BANK')",
+              "expiryType": "Current Month",
+              "expiryJson": null,
+              "expiryDisplay": null,
+              "strikeType": "Fx",
+              "strike": "( tt_ATM_SPOT ( 'NIFTY BANK', '2' )  )",
+              "strikeJson": "{\"operator\":\"and\",\"operands\":[{\"type\":\"rule\",\"value\":\"builder-basic_rule_0\",\"elements\":[{\"name\":\"ATM SPOT\",\"kid\":7787,\"params\":[{\"type\":\"value\",\"value\":\"NIFTY BANK\"},{\"type\":\"value\",\"value\":\"2\"}]}]}]}",
+              "strikeDisplay": "( ATM SPOT ( 'NIFTY BANK', '2' )  )",
+              "qty": "tt_lots(1,'INSTRUMENT','PE')",
+              "qtyType": "Lots",
+              "qtyDisplay": "1",
+              "qtyJson": null,
+              "qtyExprDisplay": null,
+              "buySell": "S",
+              "totalValue": null,
+              "limitPrice": null,
+              "limitPriceJson": null,
+              "limitPriceDisplay": null,
+              "limitPriceExprDisplay": null,
+              "entryTrigger": null,
+              "entryLimit": null,
+              "sLTrigger": null,
+              "sLTriggerJson": null,
+              "sLTriggerDisplay": null,
+              "sLTriggerExprDisplay": null,
+              "sLLimit": null,
+              "targetTrigger": null,
+              "targetLimit": null,
+              "isOvernightProtectionLeg": "No",
+              "productType": "MIS",
+              "underlyingSymbol": "NIFTY BANK",
+              "tmp": 0,
+              "updatedAt": "2026-03-23T14:25:17.086000Z",
+              "createdAt": "2025-12-15T09:46:20.763000Z"
+            }
+          ],
+          "extra": {
+            "name": null,
+            "variables": []
+          }
+        },
+        {
+          "type": "Exit",
+          "conditionValue": "( tt_get_element ( tt_CLOSE ( tt_get_data ( tt_get_instrument ( 'NFO,NIFTY BANK,,,,,' ) , '5m', 'All' )  ) , '-1' ) < tt_get_element ( tt_SUPERTREND ( tt_get_data ( tt_get_instrument ( 'NFO,NIFTY BANK,,,,,' ) , '5m', 'All' ) , '10', '3' ) , '-1' )  )  and ( tt_Time ( 'NSE' ) >= tt_Number ( '0920' )  )",
+          "conditionJson": "{\"operator\":\"and\",\"operands\":[{\"type\":\"rule\",\"value\":\"builder-basic_rule_0\",\"elements\":[{\"name\":\"Position\",\"kid\":4262,\"params\":[{\"type\":\"keyword\",\"keyword\":{\"name\":\"CLOSE\",\"kid\":7146,\"params\":[{\"type\":\"keyword\",\"keyword\":{\"name\":\"Symbol\",\"kid\":4332,\"params\":[{\"type\":\"keyword\",\"keyword\":{\"name\":\"Instrument Name\",\"kid\":2474,\"params\":[{\"type\":\"value\",\"value\":\"NFO,NIFTY BANK,,,,,\"}]}},{\"type\":\"value\",\"value\":\"5m\"},{\"type\":\"value\",\"value\":\"All\"}]}}]}},{\"type\":\"value\",\"value\":\"-1\"}]},{\"name\":\"<\",\"params\":[]},{\"name\":\"Position\",\"kid\":1066,\"params\":[{\"type\":\"keyword\",\"keyword\":{\"name\":\"SUPERTREND\",\"kid\":1061,\"params\":[{\"type\":\"keyword\",\"keyword\":{\"name\":\"Symbol\",\"kid\":6427,\"params\":[{\"type\":\"keyword\",\"keyword\":{\"name\":\"Instrument Name\",\"kid\":6607,\"params\":[{\"type\":\"value\",\"value\":\"NFO,NIFTY BANK,,,,,\"}]}},{\"type\":\"value\",\"value\":\"5m\"},{\"type\":\"value\",\"value\":\"All\"}]}},{\"type\":\"value\",\"value\":\"10\"},{\"type\":\"value\",\"value\":\"3\"}]}},{\"type\":\"value\",\"value\":\"-1\"}]}]},{\"type\":\"rule\",\"value\":\"builder-basic_rule_1\",\"elements\":[{\"name\":\"Time\",\"kid\":3596,\"params\":[{\"type\":\"value\",\"value\":\"NSE\"}]},{\"name\":\">=\",\"params\":[]},{\"name\":\"Number\",\"kid\":4697,\"params\":[{\"type\":\"value\",\"value\":\"0920\"}]}]}]}",
+          "conditionDisplay": "( Position ( CLOSE ( Symbol ( Instrument Name ( 'NFO,NIFTY BANK,,,,,' ) , '5m', 'All' )  ) , '-1' ) < Position ( SUPERTREND ( Symbol ( Instrument Name ( 'NFO,NIFTY BANK,,,,,' ) , '5m', 'All' ) , '10', '3' ) , '-1' )  )  and ( Time ( 'NSE' ) >= Number ( '0920' )  )",
+          "subType": "None",
+          "visible": 1,
+          "legs": [],
+          "extra": {
+            "name": null,
+            "variables": []
+          }
+        }
+      ]
+    },
+    {
+      "list": 0,
+      "name": null,
+      "conditions": [
+        {
+          "type": "Entry",
+          "conditionValue": "( tt_get_element ( tt_CLOSE ( tt_get_data ( tt_get_instrument ( 'NFO,NIFTY BANK,,,,,' ) , '5m', 'All' )  ) , '-1' ) < tt_get_element ( tt_SUPERTREND ( tt_get_data ( tt_get_instrument ( 'NFO,NIFTY BANK,,,,,' ) , '5m', 'All' ) , '10', '3' ) , '-1' )  )  and ( tt_Time ( 'NSE' ) >= tt_Number ( '0920' )  )",
+          "conditionJson": "{\"operator\":\"and\",\"operands\":[{\"type\":\"rule\",\"value\":\"builder-basic_rule_0\",\"elements\":[{\"name\":\"Position\",\"kid\":4262,\"params\":[{\"type\":\"keyword\",\"keyword\":{\"name\":\"CLOSE\",\"kid\":7146,\"params\":[{\"type\":\"keyword\",\"keyword\":{\"name\":\"Symbol\",\"kid\":4332,\"params\":[{\"type\":\"keyword\",\"keyword\":{\"name\":\"Instrument Name\",\"kid\":2474,\"params\":[{\"type\":\"value\",\"value\":\"NFO,NIFTY BANK,,,,,\"}]}},{\"type\":\"value\",\"value\":\"5m\"},{\"type\":\"value\",\"value\":\"All\"}]}}]}},{\"type\":\"value\",\"value\":\"-1\"}]},{\"name\":\"<\",\"params\":[]},{\"name\":\"Position\",\"kid\":1066,\"params\":[{\"type\":\"keyword\",\"keyword\":{\"name\":\"SUPERTREND\",\"kid\":1061,\"params\":[{\"type\":\"keyword\",\"keyword\":{\"name\":\"Symbol\",\"kid\":6427,\"params\":[{\"type\":\"keyword\",\"keyword\":{\"name\":\"Instrument Name\",\"kid\":6607,\"params\":[{\"type\":\"value\",\"value\":\"NFO,NIFTY BANK,,,,,\"}]}},{\"type\":\"value\",\"value\":\"5m\"},{\"type\":\"value\",\"value\":\"All\"}]}},{\"type\":\"value\",\"value\":\"10\"},{\"type\":\"value\",\"value\":\"3\"}]}},{\"type\":\"value\",\"value\":\"-1\"}]}]},{\"type\":\"rule\",\"value\":\"builder-basic_rule_1\",\"elements\":[{\"name\":\"Time\",\"kid\":8516,\"params\":[{\"type\":\"value\",\"value\":\"NSE\"}]},{\"name\":\">=\",\"params\":[]},{\"name\":\"Number\",\"kid\":6948,\"params\":[{\"type\":\"value\",\"value\":\"0920\"}]}]}]}",
+          "conditionDisplay": "( Position ( CLOSE ( Symbol ( Instrument Name ( 'NFO,NIFTY BANK,,,,,' ) , '5m', 'All' )  ) , '-1' ) < Position ( SUPERTREND ( Symbol ( Instrument Name ( 'NFO,NIFTY BANK,,,,,' ) , '5m', 'All' ) , '10', '3' ) , '-1' )  )  and ( Time ( 'NSE' ) >= Number ( '0920' )  )",
+          "subType": "None",
+          "visible": 1,
+          "legs": [
+            {
+              "instrument": 1854,
+              "list": 0,
+              "optionType": "CE",
+              "expiry": "tt_curr_monthexpiry('NIFTY BANK')",
+              "expiryType": "Current Month",
+              "expiryJson": null,
+              "expiryDisplay": null,
+              "strikeType": "Fx",
+              "strike": "( tt_ATM_SPOT ( 'NIFTY BANK', '-2' )  )",
+              "strikeJson": "{\"operator\":\"and\",\"operands\":[{\"type\":\"rule\",\"value\":\"builder-basic_rule_0\",\"elements\":[{\"name\":\"ATM SPOT\",\"kid\":9495,\"params\":[{\"type\":\"value\",\"value\":\"NIFTY BANK\"},{\"type\":\"value\",\"value\":\"-2\"}]}]}]}",
+              "strikeDisplay": "( ATM SPOT ( 'NIFTY BANK', '-2' )  )",
+              "qty": "tt_lots(1,'INSTRUMENT','CE')",
+              "qtyType": "Lots",
+              "qtyDisplay": "1",
+              "qtyJson": null,
+              "qtyExprDisplay": null,
+              "buySell": "S",
+              "totalValue": null,
+              "limitPrice": null,
+              "limitPriceJson": null,
+              "limitPriceDisplay": null,
+              "limitPriceExprDisplay": null,
+              "entryTrigger": null,
+              "entryLimit": null,
+              "sLTrigger": null,
+              "sLTriggerJson": null,
+              "sLTriggerDisplay": null,
+              "sLTriggerExprDisplay": null,
+              "sLLimit": null,
+              "targetTrigger": null,
+              "targetLimit": null,
+              "isOvernightProtectionLeg": "No",
+              "productType": "MIS",
+              "underlyingSymbol": "NIFTY BANK",
+              "tmp": 0,
+              "updatedAt": "2026-03-23T14:25:17.099000Z",
+              "createdAt": "2025-12-15T09:46:20.779000Z"
+            }
+          ],
+          "extra": {
+            "name": null,
+            "variables": []
+          }
+        },
+        {
+          "type": "Exit",
+          "conditionValue": "( tt_get_element ( tt_CLOSE ( tt_get_data ( tt_get_instrument ( 'NFO,NIFTY BANK,,,,,' ) , '5m', 'All' )  ) , '-1' ) > tt_get_element ( tt_SUPERTREND ( tt_get_data ( tt_get_instrument ( 'NFO,NIFTY BANK,,,,,' ) , '5m', 'All' ) , '10', '3' ) , '-1' )  )  and ( tt_Time ( 'NSE' ) >= tt_Number ( '0920' )  )",
+          "conditionJson": "{\"operator\":\"and\",\"operands\":[{\"type\":\"rule\",\"value\":\"builder-basic_rule_0\",\"elements\":[{\"name\":\"Position\",\"kid\":4262,\"params\":[{\"type\":\"keyword\",\"keyword\":{\"name\":\"CLOSE\",\"kid\":7146,\"params\":[{\"type\":\"keyword\",\"keyword\":{\"name\":\"Symbol\",\"kid\":4332,\"params\":[{\"type\":\"keyword\",\"keyword\":{\"name\":\"Instrument Name\",\"kid\":2474,\"params\":[{\"type\":\"value\",\"value\":\"NFO,NIFTY BANK,,,,,\"}]}},{\"type\":\"value\",\"value\":\"5m\"},{\"type\":\"value\",\"value\":\"All\"}]}}]}},{\"type\":\"value\",\"value\":\"-1\"}]},{\"name\":\">\",\"params\":[]},{\"name\":\"Position\",\"kid\":1066,\"params\":[{\"type\":\"keyword\",\"keyword\":{\"name\":\"SUPERTREND\",\"kid\":1061,\"params\":[{\"type\":\"keyword\",\"keyword\":{\"name\":\"Symbol\",\"kid\":6427,\"params\":[{\"type\":\"keyword\",\"keyword\":{\"name\":\"Instrument Name\",\"kid\":6607,\"params\":[{\"type\":\"value\",\"value\":\"NFO,NIFTY BANK,,,,,\"}]}},{\"type\":\"value\",\"value\":\"5m\"},{\"type\":\"value\",\"value\":\"All\"}]}},{\"type\":\"value\",\"value\":\"10\"},{\"type\":\"value\",\"value\":\"3\"}]}},{\"type\":\"value\",\"value\":\"-1\"}]}]},{\"type\":\"rule\",\"value\":\"builder-basic_rule_1\",\"elements\":[{\"name\":\"Time\",\"kid\":6450,\"params\":[{\"type\":\"value\",\"value\":\"NSE\"}]},{\"name\":\">=\",\"params\":[]},{\"name\":\"Number\",\"kid\":2010,\"params\":[{\"type\":\"value\",\"value\":\"0920\"}]}]}]}",
+          "conditionDisplay": "( Position ( CLOSE ( Symbol ( Instrument Name ( 'NFO,NIFTY BANK,,,,,' ) , '5m', 'All' )  ) , '-1' ) > Position ( SUPERTREND ( Symbol ( Instrument Name ( 'NFO,NIFTY BANK,,,,,' ) , '5m', 'All' ) , '10', '3' ) , '-1' )  )  and ( Time ( 'NSE' ) >= Number ( '0920' )  )",
+          "subType": "None",
+          "visible": 1,
+          "legs": [],
+          "extra": {
+            "name": null,
+            "variables": []
+          }
+        }
+      ]
+    },
+    {
+      "name": null,
+      "conditions": [
+        {
+          "type": "Repair Once",
+          "conditionValue": null,
+          "conditionJson": null,
+          "conditionDisplay": null,
+          "subType": "Overnight Protection",
+          "visible": 0,
+          "legs": [],
+          "extra": {
+            "name": null,
+            "variables": []
+          }
+        },
+        {
+          "type": "Universal Exit",
+          "conditionValue": "( tt_Time ( 'NSE' ) >= tt_Number ( '1515' )  )",
+          "conditionJson": "{\"operator\":\"and\",\"operands\":[{\"type\":\"rule\",\"value\":\"builder-basic_rule_1\",\"elements\":[{\"name\":\"Time\",\"kid\":1583,\"params\":[{\"type\":\"value\",\"value\":\"NSE\"}]},{\"name\":\">=\",\"params\":[]},{\"name\":\"Number\",\"kid\":8054,\"params\":[{\"type\":\"value\",\"value\":\"1515\"}]}]}]}",
+          "conditionDisplay": "( Time ( 'NSE' ) >= Number ( '1515' )  )",
+          "subType": "None",
+          "visible": 1,
+          "legs": [],
+          "extra": {
+            "name": null,
+            "variables": []
+          }
+        }
+      ]
+    }
+  ],
+  "currency": "INR",
+  "priceExecution": "LTP",
+  "tranchSize": 100,
+  "tslToCostAtProfit": 0,
+  "tslProfitIncrease": 0,
+  "tslSlIncrease": 0,
+  "runFrequency": "Continuous",
+  "firstTradeAfterOpen": 1,
+  "lastTradeBeforeClose": 60,
+  "rolloverExpiryPeriod": "Next Week",
+  "capitalRequired": 225000,
+  "priceRevisionAttempts": 5,
+  "tranchWaitSecs": 1,
+  "exitShortsFirst": 0,
+  "priceRevisionTimeout": 1,
+  "reactivateEvery": 360,
+  "finalAction": "MARKET",
+  "exitAtMarket": 0,
+  "runEvery": 1,
+  "rolloverExpiryTime": "30",
+  "priceTicksMultiple": "7",
+  "pythonCode": null,
+  "isPublic": 0,
+  "minMultiple": 1,
+  "maxMultiple": 100,
+  "freePeriod": 1,
+  "fixedFee": "0.00",
+  "fixedFeePeriod": "1",
+  "variableFee": "0.00",
+  "hurdleRate": 0,
+  "recreatePositionsInNewFollowers": "No",
+  "allowDuplication": 0,
+  "confirmationPerSubscriber": 0,
+  "hideSubscribers": "No",
+  "strategyPublicLinkAccess": "Yes",
+  "strategyPublicLink": null,
+  "displayPositionsToNonSubscribers": 0,
+  "highWatermark": "Yes",
+  "showLiveAutoDeployment": 0,
+  "feeShare": null,
+  "isApproved": 0,
+  "feeFrequency": "Month",
+  "backtestLinkSubscribers": null,
+  "backtestLinkNonsubscribers": null
+}

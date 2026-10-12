@@ -16,17 +16,17 @@ logic: "Style: Directional option buying (trend following) on NIFTY BANK.\nIntra
   \ or after 09:16 AND the time is before 09:30 AND close of NIFTY BANK (spot/index) 15m candles on the current\
   \ (forming) candle is above Supertrend(10, 3) of NIFTY BANK (spot/index) 15m candles on the current (forming)\
   \ candle AND open CE quantity on NIFTY BANK equals 0).\n    -> BUY 1 lot NIFTY BANK CE ATM+2 strike (spot-based)\
-  \ (current month expiry, intraday (MIS))\n  Exit when close of NIFTY BANK (spot/index) 15m candles on the last\
-  \ completed candle is below Supertrend(10, 3) of NIFTY BANK (spot/index) 15m candles on the last completed candle\
-  \ AND the time is at or after 09:31.\n\nSet 2:\n  Entry when (close of NIFTY BANK (spot/index) 15m candles on\
-  \ the last completed candle is below Supertrend(10, 3) of NIFTY BANK (spot/index) 15m candles on the last completed\
-  \ candle AND the time is at or after 09:30) OR (the time is at or after 09:16 AND the time is before 09:30 AND\
-  \ close of NIFTY BANK (spot/index) 15m candles on the current (forming) candle is below Supertrend(10, 3) of NIFTY\
-  \ BANK (spot/index) 15m candles on the current (forming) candle AND open PE quantity on NIFTY BANK equals 0).\n\
-  \    -> BUY 1 lot NIFTY BANK PE ATM-2 strike (spot-based) (current month expiry, intraday (MIS))\n  Exit when\
-  \ close of NIFTY BANK (spot/index) 15m candles on the last completed candle is above Supertrend(10, 3) of NIFTY\
-  \ BANK (spot/index) 15m candles on the last completed candle AND the time is at or after 09:31.\n\nAll sets:\n\
-  \  Exit everything when the time is at or after 15:14."
+  \ = 2 strikes out of the money (current month expiry, intraday (MIS))\n  Exit when close of NIFTY BANK (spot/index)\
+  \ 15m candles on the last completed candle is below Supertrend(10, 3) of NIFTY BANK (spot/index) 15m candles on\
+  \ the last completed candle AND the time is at or after 09:31.\n\nSet 2:\n  Entry when (close of NIFTY BANK (spot/index)\
+  \ 15m candles on the last completed candle is below Supertrend(10, 3) of NIFTY BANK (spot/index) 15m candles on\
+  \ the last completed candle AND the time is at or after 09:30) OR (the time is at or after 09:16 AND the time\
+  \ is before 09:30 AND close of NIFTY BANK (spot/index) 15m candles on the current (forming) candle is below Supertrend(10,\
+  \ 3) of NIFTY BANK (spot/index) 15m candles on the current (forming) candle AND open PE quantity on NIFTY BANK\
+  \ equals 0).\n    -> BUY 1 lot NIFTY BANK PE ATM-2 strike (spot-based) = 2 strikes out of the money (current month\
+  \ expiry, intraday (MIS))\n  Exit when close of NIFTY BANK (spot/index) 15m candles on the last completed candle\
+  \ is above Supertrend(10, 3) of NIFTY BANK (spot/index) 15m candles on the last completed candle AND the time\
+  \ is at or after 09:31.\n\nAll sets:\n  Exit everything when the time is at or after 15:14."
 ideal_conditions:
   trend:
   - up
@@ -47,6 +47,7 @@ min_capital_inr: 100000
 min_experience: intermediate
 underlyings:
 - BANKNIFTY
+active_days: any
 source:
   format: tt-strategy/v2
   original_name: BNF 15 min Super trend Intraday - Instant Entry
