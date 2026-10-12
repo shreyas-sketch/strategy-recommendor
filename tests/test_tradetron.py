@@ -162,3 +162,13 @@ def test_nifty_3m_supertrend_and_kc_nifty_pair():
     assert buy["draft"]["underlyings"] == sell["draft"]["underlyings"] == ["NIFTY50"]
     assert "BUY 1 lot NIFTY 50 CE ATM" in buy["draft"]["logic"] and "SELL 1 lot NIFTY 50 PE ATM" in sell["draft"]["logic"]
     assert any("NIFTY_key1" in w for w in buy["warnings"])
+
+
+def test_banknifty_3m_supertrend_stop_loss_and_kc_bank_buying():
+    d = draft("banknifty_3m_st_sl")["draft"]
+    assert d["underlyings"] == ["BANKNIFTY"] and "3m candles" in d["logic"]
+    assert "premium rises 83 points above the entry price" in d["logic"]
+    assert "NIFTY BANK PE, strike = NIFTY BANK spot rounded to the nearest 100 + 200 (about 200 points in the money)" in d["logic"]
+    kc = draft("kc_banknifty_buying")
+    assert "BUY 1 lot NIFTY BANK CE ATM" in kc["draft"]["logic"]
+    assert any("BANKNIFTY_key1" in w for w in kc["warnings"])

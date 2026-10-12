@@ -1,0 +1,57 @@
+# Imported from Tradetron export "BankNifty 3 min st intraday 2.5K Per trade SL".
+# Ideal conditions were suggested from the strategy's structure — review them.
+id: banknifty_3_min_st_intraday_sl
+name: BankNifty 3 min st intraday 2.5K Per trade SL
+category: trend
+instruments:
+- options
+horizons:
+- 1d
+- 1w
+description: 'Directional in-the-money option selling on NIFTY BANK (intraday): 3-min Supertrend(10,3) — sells a ~200-point
+  ITM put in uptrends and ITM call in downtrends, with an 83-point premium stop-loss (about ₹2.5K per lot).'
+logic: "Style: Directional option selling on NIFTY BANK.\nIntraday: everything is closed by 15:14 IST.\nIndicators used:\
+  \ Supertrend.\nCapital required (per Tradetron): ₹225,000.\nStop-loss: a short option is closed when its premium rises\
+  \ 83 points above the entry price (per unit; × lot size per lot).\n\nSet 1:\n  Entry when (close of NIFTY BANK (spot/index)\
+  \ 3m candles on the last completed candle is above Supertrend(10, 3) of NIFTY BANK (spot/index) 3m candles on the last\
+  \ completed candle AND the time equals 09:18) OR (the time is at or after 09:21 AND close of NIFTY BANK (spot/index)\
+  \ 3m candles on the last completed candle is above Supertrend(10, 3) of NIFTY BANK (spot/index) 3m candles on the last\
+  \ completed candle AND close of NIFTY BANK (spot/index) 3m candles on the candle before that is below Supertrend(10,\
+  \ 3) of NIFTY BANK (spot/index) 3m candles on the candle before that).\n    -> SELL 1 lot NIFTY BANK PE, strike = NIFTY\
+  \ BANK spot rounded to the nearest 100 + 200 (about 200 points in the money) (current month expiry, intraday (MIS))\n\
+  \  Exit when (close of NIFTY BANK (spot/index) 3m candles on the last completed candle is below Supertrend(10, 3) of\
+  \ NIFTY BANK (spot/index) 3m candles on the last completed candle AND the time is at or after 09:18) OR the live price\
+  \ (LTP) of the traded leg 1 of set 1 is above the entry price of traded leg 1 of set 1 + 83.\n\nSet 2:\n  Entry when\
+  \ (close of NIFTY BANK (spot/index) 3m candles on the last completed candle is below Supertrend(10, 3) of NIFTY BANK\
+  \ (spot/index) 3m candles on the last completed candle AND the time equals 09:18) OR (the time is at or after 09:21\
+  \ AND close of NIFTY BANK (spot/index) 3m candles on the last completed candle is below Supertrend(10, 3) of NIFTY\
+  \ BANK (spot/index) 3m candles on the last completed candle AND close of NIFTY BANK (spot/index) 3m candles on the\
+  \ candle before that is above Supertrend(10, 3) of NIFTY BANK (spot/index) 3m candles on the candle before that).\n\
+  \    -> SELL 1 lot NIFTY BANK CE, strike = NIFTY BANK spot rounded to the nearest 100 - 200 (about 200 points in the\
+  \ money) (current month expiry, intraday (MIS))\n  Exit when (close of NIFTY BANK (spot/index) 3m candles on the last\
+  \ completed candle is above Supertrend(10, 3) of NIFTY BANK (spot/index) 3m candles on the last completed candle AND\
+  \ the time is at or after 09:18) OR the live price (LTP) of the traded leg 1 of set 2 is above the entry price of traded\
+  \ leg 1 of set 2 + 83.\n\nAll sets:\n  Exit everything when the time is at or after 15:14."
+ideal_conditions:
+  trend:
+  - up
+  - down
+  trend_strength:
+  - moderate
+  - strong
+  volatility:
+  - normal
+  - high
+  squeeze: any
+avoid_conditions:
+- Sharp reversals against the position
+- Choppy days that flip the signal repeatedly
+risk_notes: 'Sells naked options in the trend direction: collects premium but a fast reversal causes large losses.'
+underlyings:
+- BANKNIFTY
+active_days: any
+source:
+  format: tt-strategy/v2
+  original_name: BankNifty 3 min st intraday 2.5K Per trade SL
+  sha256: bf3a936c4e4786c70450a3e0a34347d6b555c52b0eaec23bf346c7da820423ec
+  imported: '2026-10-12'
