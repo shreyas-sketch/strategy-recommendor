@@ -52,8 +52,9 @@ class Recommendation(BaseModel):
 
 
 class PortfolioRecommendation(BaseModel):
-    portfolio_summary: str = Field(description="2-3 sentences on what this portfolio is exposed to right now")
-    market_summary: str = Field(description="1-2 sentences on the benchmark index regime")
+    portfolio_summary: str = Field(description="2-3 sentences on what the portfolio is exposed to right now, "
+                                               "or a one-line note if no portfolio was provided")
+    market_summary: str = Field(description="1-2 sentences on the regime of the indices the strategies trade")
     confidence: Literal["low", "medium", "high"]
     top_strategy_id: str = Field(description=f"Strategy to run today, or {NO_TRADE}")
     run_on: str = Field(description="What to run it on: the benchmark index, or a holding's symbol from the list")
@@ -117,22 +118,21 @@ def build_user(instrument_label: str, snapshot: dict, rule_scores: list[dict]) -
 
 
 PORTFOLIO_SYSTEM_TEMPLATE = """You are the strategy-selection analyst for an algorithmic trading platform in the Indian market (NSE/BSE).
-Each morning a participant asks: "Given MY portfolio, which ONE of the platform's strategies should I run TODAY?"
+Each morning a participant asks: "Which ONE of the platform's strategies should I run TODAY?" Strategies run automatically on the platform for the trading day.
 
 How to decide:
-- Use ONLY the numbers provided: the benchmark index snapshot, portfolio statistics and per-holding data. Do not invent news, events, sectors you are unsure of, or prices.
-- Weigh both the market regime (benchmark) and the portfolio: concentration, how much of it is trending up/down or sideways, volatility of the largest holdings, unrealised profit or loss.
-  Examples of portfolio-aware reasoning: a portfolio heavy in holdings that are falling may call for a strategy that profits from or hedges downside; large unrealised gains in volatile holdings argue for protection; a portfolio of strongly trending stocks suits trend-following on those stocks.
-- run_on: say what to apply the strategy to — the benchmark index or one specific holding symbol from the list. Respect each strategy's instruments list.
-- The rule_score is a market-only hint; override it when the portfolio changes the picture.
+- Use ONLY the numbers provided. Do not invent news, events, expiry dates you were not given, or prices.
+- Each strategy trades the index listed in its "underlyings". Judge it on THAT index's regime in underlying_markets — never on a different index. A strategy with no underlyings is generic: judge it on the benchmark.
+- Read each strategy's logic carefully: option buying needs movement and suffers from time decay in ranges; option selling and straddles profit from calm or decaying premium and suffer on trending or volatile days; note day-of-week or expiry-day conditions (today's date and weekday are given) and say so if a strategy may not trigger today.
+- If a portfolio is provided, also weigh it: concentration, how much is trending up/down or sideways, volatility of the largest holdings, unrealised profit or loss (e.g. a portfolio heavy in falling stocks may call for a strategy that profits from or offsets downside). If portfolio is null, decide on the markets and the profile only.
+- run_on: the index (or holding symbol) the strategy will trade — normally its underlying.
+- The rule_score is a simple pre-computed match on each strategy's own underlying; use it as a hint and override it when the detailed numbers or the strategy logic disagree.
 - If no strategy fits, set top_strategy_id to {no_trade} and explain — sitting out is valid.
 - Suitability comes first. Only the strategies in eligible_strategy_ids may be recommended or ranked; the others were excluded by hard rules for this participant's profile (risk tolerance, experience, capital, F&O access) and are listed in excluded_strategies for context only.
-- Within the eligible set, weigh participant_profile: prefer simpler rules for beginners, defined-risk strategies for low risk tolerance, and nothing whose sizing is unrealistic for the capital band. Mention the profile in why when it shaped the pick.
+- Within the eligible set, weigh participant_profile when present: prefer simpler rules for beginners, defined-risk strategies for low risk tolerance, and nothing whose sizing is unrealistic for the capital band. Mention the profile in why when it shaped the pick.
 - Rank every eligible strategy exactly once with its exact id; fit scores must match the order.
 - Justify the pick against the alternatives: why_top_over_others names the runner-up and the separating numbers; vs_top on every strategy gives the concrete reason it ranks below the pick; deciding_factors lists 3-6 facts with the strategy ids each favors and hurts.
-- Short, concrete, cite numbers (e.g. "38% of the portfolio is in downtrending stocks", "HDFCBANK RSI 74"). Decision support only — never promise profits.
-
-The participant runs the strategy for the next trading DAY.
+- Short, concrete, cite numbers (e.g. "BANKNIFTY ADX 31", "NIFTY volatility in the 20th percentile"). Decision support only — never promise profits.
 
 Strategy catalog:
 {catalog}"""
@@ -146,7 +146,7 @@ def build_portfolio_system(strategies: list[Strategy]) -> str:
 def build_portfolio_user(context: dict, rule_scores: list[dict]) -> str:
     # The context carries holdings and statistics only — never the participant's name or phone.
     return (
-        f"Benchmark and portfolio data:\n{json.dumps(context, indent=1, ensure_ascii=False)}\n\n"
+        f"Market, portfolio and participant data:\n{json.dumps(context, indent=1, ensure_ascii=False)}\n\n"
         f"Rule-engine market pre-scores (hint only):\n{json.dumps(rule_scores)}\n\n"
         "Which strategy should this participant run today?"
     )

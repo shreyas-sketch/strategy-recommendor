@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import json
 import logging
 import re
 import threading
@@ -14,6 +15,8 @@ import pandas as pd
 import requests
 
 from .analysis.regime import rule_scores
+from .data.base import ProviderError
+from .data.providers import now_ist
 from .llm.recommender import NO_TRADE, RecommendationRefused
 from .profile import TradingProfile, apply_profile, profile_for_prompt, split
 from .service import RecommendationService, _RulesOnly, rules_recommendation, strategy_cards, today_ist
@@ -291,6 +294,24 @@ class PortfolioAdvisor:
         raw = self.store.get_profile(user_id)
         return TradingProfile(**raw) if raw else None
 
+    def _markets(self, keys: list[str]) -> tuple[dict, dict, str | None]:
+        """Snapshots for each index the eligible strategies trade (shared, cached across participants)."""
+        markets, views, provider = {}, {}, None
+        for key in keys:
+            inst = self.settings.instrument(key)
+            try:
+                snap, provider = self.service.market_snapshot(inst, "1d")
+            except Exception as exc:
+                log.warning("no market data for %s: %s", key, type(exc).__name__)
+                continue
+            markets[key] = {"label": inst["label"], "regime": snap["regime"]}
+            views[key] = {"instrument": inst["label"], "regime": snap["regime"],
+                          "primary": {k: snap["primary"].get(k) for k in (
+                              "window_return_pct", "adx", "efficiency_ratio", "choppiness", "rsi14",
+                              "realized_vol_annual_pct", "vol_percentile", "bb_width_percentile", "atr_pct")},
+                          "daily_context": snap.get("daily_context")}
+        return markets, views, provider
+
     def _generate(self, user_id: int, day: str) -> dict:
         admin = self.settings.admin
         strategies = self.settings.strategies_for("1d")
@@ -301,9 +322,8 @@ class PortfolioAdvisor:
         eligible_ids = {s.id for s in eligible}
         names = {s.id: s.name for s in strategies}
         cards = strategy_cards(strategies)
-        bench_inst = self.settings.instrument(admin.portfolio_benchmark)
         portfolio = self.store.get_portfolio(user_id)
-        meta = {"day": day, "engine": "claude", "benchmark": bench_inst["label"], "data_provider": None,
+        meta = {"day": day, "engine": "claude", "benchmark": None, "data_provider": None,
                 "has_portfolio": bool(portfolio), "has_profile": profile is not None, "note": None,
                 "generated_at": time.time()}
 
@@ -317,53 +337,82 @@ class PortfolioAdvisor:
             meta.update(engine="rules")
             return {"recommendation": rec, "strategies": cards, "meta": meta}
 
-        snapshot, provider = self.service.market_snapshot(bench_inst, "1d")
-        meta["data_provider"] = provider
-        scores = rule_scores(snapshot["regime"], eligible)
+        # Each strategy is judged on the index it trades; the benchmark covers generic strategies + portfolio.
+        bench_key = self.settings.instrument(admin.portfolio_benchmark)["key"]
+        keys = list(dict.fromkeys([u for s in eligible for u in s.underlyings]))
+        if portfolio or any(not s.underlyings for s in eligible) or not keys:
+            keys = list(dict.fromkeys(keys + [bench_key]))
+        markets, views, provider = self._markets(keys)
+        if not markets:
+            raise ProviderError("market data unavailable for " + ", ".join(keys))
+        bench = markets.get(bench_key)
+        meta.update(data_provider=provider, benchmark=self.settings.instrument(bench_key)["label"],
+                    markets=[m["label"] for m in markets.values()])
+        scores = rule_scores(bench["regime"] if bench else None, eligible, markets)
+        if not scores:
+            raise ProviderError("market data unavailable for the indices these strategies trade")
+        scored = {sc["strategy_id"] for sc in scores}
+        judged = [s for s in eligible if s.id in scored]
 
+        context = portfolio_context(self.service, portfolio["holdings"], views.get(bench_key)) if portfolio else None
+        now = now_ist()
+        prompt_context = {
+            "today": {"date": day, "weekday": now.strftime("%A")},
+            "underlying_markets": views,
+            "portfolio": context,
+            "participant_profile": profile_for_prompt(profile),
+            "eligible_strategy_ids": sorted(s.id for s in judged),
+            "excluded_strategies": excluded,
+        }
+
+        # Without a portfolio the answer depends only on markets + profile -> share it across participants.
+        shared_key = None
         if not portfolio:
-            # No portfolio: the shared market recommendation, personalised to the profile.
-            market = self.service.recommend(bench_inst["key"], "1d")
-            rec = apply_profile(market["recommendation"], eligible_ids, excluded, names)
-            rec.update(run_on=bench_inst["label"], portfolio_summary="No portfolio uploaded — based on the market only.",
-                       portfolio_risks=[], whatsapp_line=_clean_param(rec.get("why_top_over_others", ""), 150))
-            meta.update(engine=market["meta"]["engine"], note=market["meta"].get("note"))
-            return {"recommendation": rec, "strategies": cards, "meta": meta}
-
-        bench_view = {"instrument": bench_inst["label"], "regime": snapshot["regime"],
-                      "primary": {k: snapshot["primary"].get(k) for k in (
-                          "window_return_pct", "adx", "efficiency_ratio", "choppiness", "rsi14",
-                          "realized_vol_annual_pct", "vol_percentile", "bb_width_percentile")},
-                      "daily_context": snapshot.get("daily_context")}
-        context = portfolio_context(self.service, portfolio["holdings"], bench_view)
-        prompt_context = {**context, "participant_profile": profile_for_prompt(profile),
-                          "eligible_strategy_ids": sorted(eligible_ids), "excluded_strategies": excluded}
+            engine = self.service.resolve_engine()
+            shared_key = "|".join(["today-v1", day, engine["engine"], engine["model"] or "-", admin.effort,
+                                   self.settings.catalog_hash(), ",".join(sorted(s.id for s in judged)),
+                                   json.dumps(profile_for_prompt(profile), sort_keys=True)])
+            hit = self.store.cache_get(shared_key, 20 * 3600, time.time())
+            if hit:
+                meta.update(hit["meta_extra"], shared=True)
+                return {"recommendation": hit["rec"], "markets": views, "strategies": cards, "meta": meta}
 
         rec = None
         try:
             parsed, info = self.service.call_claude(
-                self.service.recommender.recommend_portfolio, label="PORTFOLIO", horizon="1d",
-                catalog=strategies, eligible=eligible, context=prompt_context, rule_scores=scores)
+                self.service.recommender.recommend_portfolio, label="PORTFOLIO" if portfolio else "TODAY",
+                horizon="1d", catalog=strategies, eligible=judged, context=prompt_context, rule_scores=scores)
             rec = parsed.model_dump()
             meta.update(model=info["model"], cost_usd=info["cost_usd"], note=info["note"])
         except _RulesOnly as exc:
             meta.update(engine="rules", note=str(exc) or None)
         except (anthropic.APIError, RecommendationRefused, RuntimeError) as exc:
-            log.error("portfolio Claude call failed: %s", type(exc).__name__)
+            log.error("daily Claude call failed: %s", type(exc).__name__)
             meta.update(engine="rules", note="AI analysis unavailable — showing rule-engine result.")
 
         if rec is None:
-            rec = rules_recommendation(snapshot, scores, eligible)
-            st = context["portfolio_stats"]
-            rec.update(
-                run_on=bench_inst["label"],
-                portfolio_summary=(f"{st['weight_in_uptrend_pct']}% of your analysed holdings are trending up, "
-                                   f"{st['weight_in_downtrend_pct']}% down, {st['weight_sideways_pct']}% sideways."),
-                portfolio_risks=([f"Concentrated: top 3 holdings are {st['top3_weight_pct']}% of value"]
-                                 if (st["top3_weight_pct"] or 0) > 60 else []),
-                whatsapp_line=_clean_param(rec["why_top_over_others"], 150))
+            rec = rules_recommendation(None, scores, judged)
+            if context:
+                st = context["portfolio_stats"]
+                summary = (f"{st['weight_in_uptrend_pct']}% of your analysed holdings are trending up, "
+                           f"{st['weight_in_downtrend_pct']}% down, {st['weight_sideways_pct']}% sideways.")
+                risks = ([f"Concentrated: top 3 holdings are {st['top3_weight_pct']}% of value"]
+                         if (st["top3_weight_pct"] or 0) > 60 else [])
+            else:
+                summary, risks = "No portfolio uploaded — based on the markets and your profile.", []
+            top_sc = next((sc for sc in scores if sc["strategy_id"] == rec["top_strategy_id"]), None)
+            rec.update(run_on=(top_sc or {}).get("on") or meta["benchmark"], portfolio_summary=summary,
+                       portfolio_risks=risks, whatsapp_line=_clean_param(rec["why_top_over_others"], 150))
         rec = apply_profile(rec, eligible_ids, excluded, names)   # safety net + "excluded" list
         rec["whatsapp_line"] = _clean_param(rec.get("whatsapp_line", ""), 150)
         if rec["top_strategy_id"] != NO_TRADE:
-            rec["run_on"] = _clean_param(rec.get("run_on") or bench_inst["label"], 40)
-        return {"recommendation": rec, "context": context, "strategies": cards, "meta": meta}
+            top = next((s for s in strategies if s.id == rec["top_strategy_id"]), None)
+            default_on = ", ".join(self.settings.instrument(u)["label"] for u in top.underlyings) if top and top.underlyings else meta["benchmark"]
+            rec["run_on"] = _clean_param(rec.get("run_on") or default_on, 40)
+        if shared_key:
+            self.store.cache_put(shared_key, {"rec": rec, "meta_extra": {k: meta.get(k) for k in (
+                "engine", "model", "note", "data_provider", "benchmark", "markets")}}, time.time())
+        out = {"recommendation": rec, "markets": views, "strategies": cards, "meta": meta}
+        if context:
+            out["context"] = context
+        return out

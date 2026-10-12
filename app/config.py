@@ -90,7 +90,7 @@ class Strategy(BaseModel):
     instruments: list[str] = []
     horizons: list[Horizon] = Field(default=list(HORIZONS), min_length=1)
     description: str = ""
-    logic: str = ""
+    logic: str = Field("", max_length=20000)
     ideal_conditions: Conditions = Conditions()
     avoid_conditions: list[str] = []
     risk_notes: str = ""
@@ -98,6 +98,11 @@ class Strategy(BaseModel):
     risk_level: Literal["low", "medium", "high"] = "medium"
     min_capital_inr: int = Field(0, ge=0)
     min_experience: Literal["beginner", "intermediate", "advanced"] = "beginner"
+    # Instrument keys (config/settings.yaml) this strategy trades, e.g. ["BANKNIFTY"]. Each strategy is
+    # judged on the market regime of its own underlying(s). Empty = generic (judged on the analysed instrument).
+    underlyings: list[Annotated[str, Field(pattern=r"^[A-Z0-9&_\-]{1,24}$")]] = []
+    # Where it came from, e.g. {"format": "tt-strategy/v2", "original_name": ..., "sha256": ...}
+    source: dict | None = None
 
 
 class Settings:

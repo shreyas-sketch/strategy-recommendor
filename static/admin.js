@@ -197,6 +197,8 @@ $("reload").onclick = async () => {
 // ---- strategy manager ------------------------------------------------
 let strategies = [];
 let editingId = null;  // null = creating
+let currentSource = null;  // provenance of an imported draft
+let drafts = [];
 
 document.querySelectorAll(".checks[data-group]").forEach((box) => {
   const values = box.dataset.values.split(",");
@@ -208,16 +210,19 @@ const setChecks = (g, vals) => document.querySelectorAll(`.checks[data-group="${
 
 async function loadStrategies() {
   strategies = (await api("/api/admin/strategies")).strategies;
-  $("strategy-list").innerHTML = `<tr><th>Name</th><th>ID</th><th>Category</th><th>Horizons</th><th>Suits</th><th></th></tr>` +
-    strategies.map((st) => `<tr><td>${esc(st.name)}</td><td class="muted">${esc(st.id)}</td><td>${esc(st.category)}</td>
+  $("strategy-list").innerHTML = `<tr><th>Name</th><th>ID</th><th>Category</th><th>Trades on</th><th>Horizons</th><th>Suits</th><th></th></tr>` +
+    strategies.map((st) => `<tr><td>${esc(st.name)}${st.source ? ' <span class="pill conditional">Tradetron</span>' : ""}</td><td class="muted">${esc(st.id)}</td><td>${esc(st.category)}</td>
+      <td>${esc((st.underlyings || []).join(", ") || "any")}</td>
       <td>${esc(st.horizons.join(", "))}</td>
       <td class="small">${esc(st.risk_level)} risk · ${esc(st.min_experience)}+ · ₹${Number(st.min_capital_inr).toLocaleString("en-IN")}+</td>
       <td class="actions"><button data-edit="${esc(st.id)}">Edit</button> <button class="danger" data-del="${esc(st.id)}">Delete</button></td></tr>`).join("");
 }
 
-function openForm(st) {
-  editingId = st ? st.id : null;
-  $("form-title").textContent = st ? `Edit: ${st.name}` : "Add strategy";
+function openForm(st, { asDraft = false, existingId = null } = {}) {
+  editingId = asDraft ? existingId : (st ? st.id : null);
+  currentSource = st?.source || null;
+  $("form-title").textContent = asDraft ? `Review import: ${st.name}${existingId ? " (updates existing)" : ""}` : st ? `Edit: ${st.name}` : "Add strategy";
+  $("f-underlyings").value = (st?.underlyings || []).join(", ");
   $("f-name").value = st?.name || ""; $("f-id").value = st?.id || ""; $("f-category").value = st?.category || "trend";
   $("f-description").value = st?.description || ""; $("f-logic").value = st?.logic || "";
   $("f-avoid").value = (st?.avoid_conditions || []).join("\n"); $("f-risk").value = st?.risk_notes || "";
@@ -233,6 +238,35 @@ function openForm(st) {
 }
 
 $("add-strategy").onclick = () => openForm(null);
+
+function renderDrafts() {
+  $("drafts").classList.toggle("hidden", !drafts.length);
+  $("draft-table").innerHTML = `<tr><th>File</th><th>Strategy</th><th>Trades on</th><th>Notes</th><th></th></tr>` +
+    drafts.map((d, i) => `<tr><td class="small">${esc(d.file)}</td>
+      <td><b>${esc(d.draft.name)}</b><div class="muted small">${esc(d.draft.description)}</div></td>
+      <td>${esc((d.draft.underlyings || []).join(", ") || "—")}</td>
+      <td><ul class="warn-list">${d.warnings.map((w) => `<li>${esc(w)}</li>`).join("")}</ul></td>
+      <td class="actions"><button class="primary" data-review="${i}">Review &amp; save</button> <button data-discard="${i}">Discard</button></td></tr>`).join("");
+}
+$("tt-files").onchange = async (e) => {
+  clearError();
+  for (const f of e.target.files) {
+    const fd = new FormData(); fd.append("file", f);
+    try {
+      const res = await fetch("/api/admin/strategies/import", { method: "POST", body: fd, headers: { "X-Requested-With": "fetch", "X-Admin-Token": token } });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(`${f.name}: ${body.detail || res.statusText}`);
+      drafts.push(body);
+    } catch (err) { showError(err); }
+  }
+  e.target.value = "";
+  renderDrafts();
+};
+$("draft-table").addEventListener("click", (e) => {
+  const r = e.target.dataset.review, d = e.target.dataset.discard;
+  if (r !== undefined) openForm(drafts[r].draft, { asDraft: true, existingId: drafts[r].existing_id });
+  if (d !== undefined) { drafts.splice(Number(d), 1); renderDrafts(); }
+});
 $("f-cancel").onclick = () => $("strategy-form-card").classList.add("hidden");
 $("f-name").addEventListener("input", () => {
   if (editingId === null) $("f-id").value = $("f-name").value.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 40);
@@ -256,6 +290,8 @@ $("strategy-form").addEventListener("submit", async (e) => {
                         volatility: getChecks("volatility"), squeeze: sq === "any" ? "any" : sq === "true" },
     avoid_conditions: $("f-avoid").value.split("\n").map((x) => x.trim()).filter(Boolean),
     risk_notes: $("f-risk").value.trim(),
+    underlyings: $("f-underlyings").value.split(",").map((x) => x.trim().toUpperCase()).filter(Boolean),
+    source: currentSource,
     risk_level: $("f-risklevel").value,
     min_capital_inr: Math.round(Number($("f-mincap").value || 0)),
     min_experience: $("f-minexp").value,
@@ -266,6 +302,8 @@ $("strategy-form").addEventListener("submit", async (e) => {
     await api(editingId ? `/api/admin/strategies/${encodeURIComponent(editingId)}` : "/api/admin/strategies",
               { method: editingId ? "PUT" : "POST", body: JSON.stringify(body) });
     $("strategy-form-card").classList.add("hidden");
+    drafts = drafts.filter((d) => !(d.draft.id === body.id || (editingId && d.existing_id === editingId)));
+    renderDrafts();
     await loadStrategies();
   } catch (err) { showError(err); }
   finally { $("f-save").disabled = false; }

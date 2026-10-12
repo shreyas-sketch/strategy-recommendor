@@ -24,7 +24,7 @@ pip install -r requirements-dev.txt
 cp .env.example .env            # fill in ANTHROPIC_API_KEY, ADMIN_TOKEN, …
 echo "COOKIE_SECURE=0" >> .env  # local http only
 uvicorn app.main:app --reload
-pytest                          # 59 tests
+pytest                          # 68 tests
 ```
 
 * Admin: http://localhost:8000/admin (sign in with `ADMIN_TOKEN`)
@@ -154,11 +154,43 @@ can auto-downgrade to Haiku, switch to the free rule engine, or block. Model pri
 
 ## Strategies
 
-Manage them in Admin → Strategies (stored on the volume as YAML), or copy
-`config/strategies/_TEMPLATE.yaml`. The five shipped strategies are **examples** and are
-seeded on first start. Replace them with your real logic. `logic`, `avoid_conditions` and
-`risk_notes` are read by Claude. `ideal_conditions` drive the rule-engine pre-score and
-the fallback.
+### Importing from Tradetron
+
+Admin → Strategies → **Import Tradetron JSON** accepts one or more `tt-strategy/v2`
+exports. For each file the importer:
+
+* **Translates** every entry/exit condition and order leg into plain English. This is
+  the text Claude reads, e.g. "Entry when close of NIFTY BANK 15m candles on the last
+  completed candle is above Supertrend(10, 3)… → BUY 1 lot NIFTY BANK CE ATM+2 strike".
+* **Detects the index it trades** (`underlyings`: BANKNIFTY, NIFTY50, SENSEX, …), the style
+  (option buying, directional selling, short straddle) and intraday exit times.
+* **Fills in from the export:** capital (`capitalRequired`) as the minimum capital, and
+  F&O required for options legs.
+* **Suggests** risk level, experience, ideal market conditions and "avoid when" from the
+  structure. **Review these.**
+* **Warns** when signals come from runtime variables set outside the export (e.g. the KC
+  strategy's `BANKNIFTY_key1`/`key2`). Describe what sets them in Logic.
+
+Nothing is saved until you click **Review & save**. Re-importing an updated export
+refreshes the logic, underlyings and capital, and keeps the conditions and suitability you
+already reviewed. Original files are kept on the volume under `imports/`.
+
+### Each strategy is judged on its own index
+
+A strategy with `underlyings` is scored only on that index's market regime. Bank Nifty
+strategies are judged on Bank Nifty, and the NIFTY/SENSEX straddle on both indexes
+(averaged).
+* **Daily pick:** fetches each index the participant's suitable strategies trade, and
+  gives Claude today's date and weekday (for expiry-day strategies).
+* **Market check:** for an instrument, ranks only the strategies that trade it, plus
+  generic ones.
+
+### Shipped strategies
+
+The three Tradetron strategies (BNF Supertrend, ATM Roll, KC Trend ride) are seeded on
+first start. The earlier generic examples are in `config/strategies/examples/`
+for reference (not loaded). Edit strategies in the admin panel (stored on the volume as
+YAML), or copy `config/strategies/_TEMPLATE.yaml`.
 
 ## Market data
 

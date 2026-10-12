@@ -131,9 +131,13 @@ class RecommendationService:
     def recommend(self, instrument_key: str, horizon: Horizon, force_refresh: bool = False,
                   quota_user: int | None = None) -> dict:
         instrument = self.settings.instrument(instrument_key)
-        strategies = self.settings.strategies_for(horizon)
+        all_for_horizon = self.settings.strategies_for(horizon)
+        # A strategy that trades a specific index is only judged on that index's market.
+        strategies = [s for s in all_for_horizon if not s.underlyings or instrument["key"] in s.underlyings]
         if not strategies:
-            raise ValueError(f"No strategies are configured for horizon {horizon}")
+            traded = sorted({u for s in all_for_horizon for u in s.underlyings})
+            raise ValueError(f"No {horizon} strategy trades {instrument['key']}. "
+                             f"Analyse one of: {', '.join(traded) or 'none configured'}")
         engine = self.resolve_engine()
         admin = self.settings.admin
 
@@ -211,18 +215,27 @@ def _regime_value(regime: dict, dim: str) -> str:
     return regime[dim]
 
 
-def rules_recommendation(snapshot: dict, scores: list[dict], strategies) -> dict:
-    """Deterministic fallback when Claude is off or failing, including the comparison with the top pick."""
+def rules_recommendation(snapshot: dict | None, scores: list[dict], strategies) -> dict:
+    """Deterministic fallback when Claude is off or failing, including the comparison with the top pick.
+
+    Each score carries the regime it was judged on (its own underlying), so mixed-index catalogs work.
+    """
     by_id = {s.id: s for s in strategies}
-    regime = snapshot["regime"]
+    default_regime = snapshot["regime"] if snapshot else scores[0]["regime"]
     top_sc = scores[0]
     top = by_id[top_sc["strategy_id"]]
+
+    def reg(sc: dict) -> dict:
+        return sc.get("regime") or default_regime
+
+    def where(sc: dict) -> str:
+        return f" on {sc['on']}" if sc.get("on") else ""
 
     def shortfalls(sc: dict) -> list[str]:
         s = by_id[sc["strategy_id"]]
         return [f"wants {'' if d == 'squeeze' else DIM_LABELS[d] + ' '}{_wanted(s, d)} "
-                f"but the market shows {_regime_value(regime, d)}"
-                for d, v in sc["breakdown"].items() if v < top_sc["breakdown"].get(d, 1.0)]
+                f"but {sc.get('on') or 'the market'} shows {_regime_value(reg(sc), d)}"
+                for d, v in sc["breakdown"].items() if v < top_sc["breakdown"].get(d, 1.0) or v < 0.5]
 
     rankings = []
     for i, sc in enumerate(scores):
@@ -240,18 +253,23 @@ def rules_recommendation(snapshot: dict, scores: list[dict], strategies) -> dict
             vs_top = (f"Scores {sc['rule_score']} vs {top_sc['rule_score']} for {top.name}: "
                       + ("; ".join(gaps) if gaps else "matches its ideal conditions less closely") + ".")
         rankings.append({"strategy_id": s.id, "fit_score": sc["rule_score"], "verdict": verdict,
-                         "why": f"Rule match against ideal conditions for a {regime['label']} market.",
+                         "why": f"Rule match against ideal conditions for a {reg(sc)['label']} market{where(sc)}.",
                          "watch_out": s.avoid_conditions[0] if s.avoid_conditions else s.risk_notes,
                          "vs_top": vs_top})
 
     factors = []
-    for dim in ("trend", "trend_strength", "volatility", "squeeze"):
-        favors = [sc["strategy_id"] for sc in scores if sc["breakdown"].get(dim) == 1.0
-                  and (dim != "squeeze" or by_id[sc["strategy_id"]].ideal_conditions.squeeze != "any")]
-        hurts = [sc["strategy_id"] for sc in scores if sc["breakdown"].get(dim, 1.0) <= 0.3]
-        if favors or hurts:
-            factors.append({"factor": f"{DIM_LABELS[dim].capitalize()}: {_regime_value(regime, dim)}",
-                            "favors": favors, "hurts": hurts})
+    groups: dict = {}
+    for sc in scores:
+        groups.setdefault(sc.get("on"), []).append(sc)
+    for on, group in groups.items():
+        r = reg(group[0])
+        for dim in ("trend", "trend_strength", "volatility", "squeeze"):
+            favors = [sc["strategy_id"] for sc in group if sc["breakdown"].get(dim) == 1.0
+                      and (dim != "squeeze" or by_id[sc["strategy_id"]].ideal_conditions.squeeze != "any")]
+            hurts = [sc["strategy_id"] for sc in group if sc["breakdown"].get(dim, 1.0) <= 0.3]
+            if favors or hurts:
+                factors.append({"factor": f"{on + ' ' if on else ''}{DIM_LABELS[dim]}: {_regime_value(r, dim)}",
+                                "favors": favors, "hurts": hurts})
 
     pick = top.id if top_sc["rule_score"] >= 50 else NO_TRADE
     if pick == NO_TRADE:
@@ -263,16 +281,20 @@ def rules_recommendation(snapshot: dict, scores: list[dict], strategies) -> dict
     elif len(scores) > 1:
         runner = by_id[scores[1]["strategy_id"]]
         gaps = shortfalls(scores[1])
-        why = (f"{top.name} matches the most ideal conditions ({top_sc['rule_score']}/100). "
+        why = (f"{top.name} matches the most ideal conditions ({top_sc['rule_score']}/100{where(top_sc)}). "
                f"Runner-up {runner.name} ({scores[1]['rule_score']}/100) "
                + ("; ".join(gaps) if gaps else "ties on conditions and ranks second on order") + ".")
     else:
         why = f"{top.name} is the only strategy configured for this horizon."
 
+    summaries = []
+    for on, group in groups.items():
+        r = reg(group[0])
+        summaries.append(f"{on or 'Market'} looks {r['label']} with {r['volatility']} volatility"
+                         f"{' and a Bollinger squeeze' if r['squeeze'] else ''}")
     return {
-        "market_summary": (f"Market looks {regime['label']} with {regime['volatility']} volatility"
-                           f"{' and a Bollinger squeeze' if regime['squeeze'] else ''}."),
-        "regime": f"{regime['label']}, {regime['volatility']} volatility",
+        "market_summary": "; ".join(summaries) + ".",
+        "regime": "; ".join(f"{on or 'market'}: {reg(g[0])['label']}" for on, g in groups.items()),
         "confidence": "low",
         "top_strategy_id": pick,
         "why_top_over_others": why,

@@ -33,7 +33,7 @@ function recHTML(payload, { personal = false } = {}) {
     </div>`).join("");
 
   const footer = personal
-    ? `${meta.engine === "claude" ? "AI analysis" : "Rule engine"} · benchmark ${esc(meta.benchmark)} · data: ${esc(meta.data_provider)}`
+    ? `${meta.engine === "claude" ? "AI analysis" : "Rule engine"} · markets analysed: ${esc((meta.markets || [meta.benchmark]).join(", "))} · data: ${esc(meta.data_provider)}`
     : `${meta.engine === "claude" ? `AI: ${esc(meta.model)}` : "Rule engine"} · data: ${esc(meta.data_provider)} · as of ${esc(new Date(payload.snapshot.as_of).toLocaleString())}${meta.cached ? ` · cached ${Math.round(meta.cache_age_s / 60)} min ago` : ""}`;
 
   const excluded = (r.excluded || []).length ? `<section class="card"><h2>Not suitable for your profile</h2>

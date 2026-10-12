@@ -100,3 +100,6 @@ button.danger { color: var(--bad); }
 .switch-row input { width: 18px; height: 18px; }
 .invite-box { word-break: break-all; background: var(--bg); border: 1px dashed var(--border); border-radius: 8px; padding: 8px 10px; font-size: 13px; }
 .reasons { margin: 4px 0 0; padding-left: 18px; color: var(--muted); }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+label.btn { display: inline-block; border: 1px solid var(--border); background: var(--surface); color: var(--text); border-radius: 8px; padding: 8px 14px; cursor: pointer; font-size: 15px; margin: 0; }
+.warn-list { margin: 4px 0 0; padding-left: 18px; color: var(--warn); font-size: 13px; }

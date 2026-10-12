@@ -22,6 +22,7 @@ from .data.base import ProviderError
 from .notify import AISensyClient, DailyJobs, scheduler_loop
 from .portfolio import TEMPLATE_CSV, GrowwIsinResolver, PortfolioAdvisor, PortfolioError, parse_portfolio
 from .profile import TradingProfile, apply_profile, split
+from .tradetron import TradetronError, analyse as analyse_tradetron, load_export
 from .service import BudgetExceeded, QuotaExceeded, RecommendationService, today_ist
 from .store import Store
 
@@ -403,6 +404,39 @@ def create_app(settings: Settings | None = None, service: RecommendationService 
             raise HTTPException(409, str(exc))
         store.cache_clear()
         return {"deleted": strategy_id}
+
+    @app.post("/api/admin/strategies/import", dependencies=[Depends(require_admin)])
+    async def import_strategy(file: UploadFile = File(...)):
+        """Turn a Tradetron export into a draft for the admin to review; nothing is saved here."""
+        raw = await file.read(2_000_001)
+        try:
+            data, sha = load_export(raw)
+            result = analyse_tradetron(data)
+        except TradetronError as exc:
+            raise HTTPException(422, str(exc))
+        imports = settings.data_dir / "imports"
+        imports.mkdir(exist_ok=True)
+        (imports / f"{sha}.json").write_bytes(raw)          # keep the original for audit / re-translation
+        draft = result["draft"]
+        draft["source"] = {"format": data.get("_format"), "original_name": data.get("name"), "sha256": sha,
+                           "imported": today_ist()}
+        existing = next((st for st in settings.strategies.values()
+                         if (st.source or {}).get("original_name") == data.get("name") or st.id == draft["id"]), None)
+        warnings = result["warnings"]
+        if existing:
+            kept = ("description", "ideal_conditions", "avoid_conditions", "risk_notes", "risk_level",
+                    "min_experience", "horizons", "category")
+            draft = {**draft, **{k: getattr(existing, k) for k in kept}, "id": existing.id}
+            draft["ideal_conditions"] = existing.ideal_conditions.model_dump()
+            warnings = [w for w in warnings if not w.startswith("Ideal market conditions")]
+            warnings.insert(0, f"Updates the existing strategy '{existing.name}': the logic, underlyings and capital "
+                               "come from this file; your reviewed conditions and suitability are kept.")
+        try:
+            Strategy(**draft)
+        except ValidationError as exc:
+            raise HTTPException(422, f"Imported strategy is invalid: {exc}")
+        return {"draft": draft, "warnings": warnings, "existing_id": existing.id if existing else None,
+                "file": file.filename}
 
     @app.post("/api/admin/strategies/reload", dependencies=[Depends(require_admin)])
     def reload_strategies():

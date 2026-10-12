@@ -111,6 +111,12 @@ class FakeAnthropic:
 def env(tmp_path, monkeypatch):
     cfg = tmp_path / "config"
     shutil.copytree(ROOT / "config", cfg)
+    # Tests run against the generic example strategies; Tradetron tests import the real ones on top.
+    for f in (cfg / "strategies").glob("*.yaml"):
+        if not f.name.startswith("_"):
+            f.unlink()
+    for f in (cfg / "strategies" / "examples").glob("*.yaml"):
+        shutil.copy2(f, cfg / "strategies" / f.name)
     monkeypatch.setenv("ADMIN_TOKEN", "secret")
     settings = Settings(config_dir=cfg, data_dir=tmp_path / "data")
     provider = FakeProvider()
