@@ -12,3 +12,5 @@ python-dotenv==1.2.4
 python-multipart==0.0.32
 # IANA timezone data for zoneinfo (Asia/Kolkata) — slim containers may not ship system tz files
 tzdata==2026.5
+# Excel (.xlsx) uploads in Strategy research
+openpyxl==3.1.5

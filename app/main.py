@@ -23,6 +23,8 @@ from .notify import AISensyClient, DailyJobs, scheduler_loop, send_login_code
 from .daily import DailyAdvisor
 from .expiries import ExpiryCalendar
 from .tradetron import TradetronError, analyse as analyse_tradetron, load_export
+from .research import routes as research_routes
+from .research.service import ResearchService
 from .service import BudgetExceeded, QuotaExceeded, RecommendationService, today_ist
 from .store import Store
 
@@ -38,6 +40,7 @@ log = logging.getLogger("app")
 SYMBOL_RE = re.compile(r"^[A-Za-z0-9&_\-]{1,24}$")
 STATIC = ROOT / "static"
 MAX_BODY = 2_000_000
+MAX_RESEARCH_BODY = 500_000_000   # admin-only research uploads/restores; each route enforces its own cap
 
 SECURITY_HEADERS = {
     "Content-Security-Policy": ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
@@ -132,7 +135,8 @@ def check_production_config() -> None:
 
 
 def create_app(settings: Settings | None = None, service: RecommendationService | None = None,
-               jobs: DailyJobs | None = None, start_scheduler: bool | None = None) -> FastAPI:
+               jobs: DailyJobs | None = None, start_scheduler: bool | None = None,
+               research: ResearchService | None = None) -> FastAPI:
     check_production_config()
     settings = settings or Settings()
     service = service or RecommendationService(settings, Store(settings.data_dir / "app.db"))
@@ -140,6 +144,7 @@ def create_app(settings: Settings | None = None, service: RecommendationService 
     bootstrap_master_admin(store)
     if service.calendar is None and os.environ.get("EXPIRY_CALENDAR", "1") != "0":
         service.calendar = ExpiryCalendar(settings)
+    research = research or ResearchService(settings, router=service.router)
     advisor = jobs.advisor if jobs else DailyAdvisor(service)
     jobs = jobs or DailyJobs(advisor, AISensyClient())
     if start_scheduler is None:
@@ -161,8 +166,12 @@ def create_app(settings: Settings | None = None, service: RecommendationService 
 
     @app.middleware("http")
     async def guard(request: Request, call_next):
-        if int(request.headers.get("content-length") or 0) > MAX_BODY:
+        large = request.url.path in research_routes.LARGE_BODY_PATHS
+        if int(request.headers.get("content-length") or 0) > (MAX_RESEARCH_BODY if large else MAX_BODY):
             return JSONResponse({"detail": "Request too large"}, status_code=413)
+        # Large uploads are parsed before route dependencies run, so check the admin here first.
+        if large and int(request.headers.get("content-length") or 0) > MAX_BODY and admin_principal(request) is None:
+            return JSONResponse({"detail": "Admin sign-in required"}, status_code=401)
         # CSRF: state-changing API calls must come from our own JS (custom header => no cross-site form posts,
         # and a cross-site fetch would need a CORS preflight that this app never grants).
         if (request.method not in ("GET", "HEAD", "OPTIONS") and request.url.path.startswith("/api/")
@@ -816,9 +825,11 @@ def create_app(settings: Settings | None = None, service: RecommendationService 
         background.add_task(jobs.run, kind)   # send skips anyone already notified today
         return {"started": kind}
 
+    research_routes.register(app, research, require_admin, require_master)
+
     # ---- web UI ---------------------------------------------------------
     pages = {"/": "index.html", "/login": "login.html", "/invite": "invite.html", "/admin": "admin.html",
-             "/admin/invite": "invite.html"}
+             "/admin/invite": "invite.html", "/admin/research": "research.html"}
     for route, page in pages.items():
         app.add_api_route(route, _page(page), include_in_schema=False)
     app.mount("/static", StaticFiles(directory=STATIC), name="static")
