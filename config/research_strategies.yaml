@@ -1,0 +1,49 @@
+# The deployed strategies the research module evaluates. Seeded into data/research/research.db on first
+# start (each id once); edit them afterwards in Admin → Strategy research → Data.
+#
+# margin              capital the Tradetron P&L is earned on (Rs)
+# cost_per_active_day estimated statutory/exchange charges on a day it trades, used only when an uploaded
+#                     P&L file has no charges column. From each deployment's Tradetron "Cost Lab":
+#                     estimated costs ÷ (win days + loss days).
+# underlying          the index whose market regime describes the strategy
+
+- id: index_intraday_basket
+  name: Index Intraday Basket
+  underlying: SENSEX
+  margin: 500000
+  cost_per_active_day: 299      # Rs 1,03,444 over 346 active days (Tradetron, 26 May 2025 – 20 Oct 2026)
+  tradetron_id: "7830005"
+  notes: Trades SENSEX options. Tagged Positional / LongVol on Tradetron despite the name.
+
+- id: nifty_st_adx_i
+  name: Nifty St adx i
+  underlying: NIFTY50
+  margin: 225000
+  cost_per_active_day: 121      # Rs 34,716 over 287 active days (22 Aug 2025 – 16 Oct 2026)
+  tradetron_id: "8346791"
+  notes: NIFTY 50 options.
+
+- id: banknifty_1_2_intraday
+  name: BankNifty 1.2 intraday
+  underlying: BANKNIFTY
+  margin: 200000
+  cost_per_active_day: 138      # Rs 34,498 over 250 active days (16 Oct 2025 – 20 Oct 2026)
+  tradetron_id: "8648201"
+  notes: NIFTY BANK options.
+
+- id: breakout_buy_options_v1_nifty
+  name: Breakout Buy Options V1 Nifty
+  underlying: NIFTY50
+  margin: 50000
+  cost_per_active_day: 141.5    # Rs 42,744 over 302 active days (30 May 2025 – 20 Oct 2026)
+  tradetron_id: "7721997"
+  notes: NIFTY 50 option buying. Costs take ~47% of gross P&L.
+
+- id: atm_roll_aggressive_diversified
+  name: ATM Roll Aggressive Diversified
+  underlying: SENSEX
+  margin: 600000
+  cost_per_active_day: 78.7     # Rs 20,693 over 263 active days (17 Jul 2025 – 20 Oct 2026)
+  tradetron_id: "8147425"
+  config_strategy_id: atm_roll_aggressive_diversified_kapoor
+  notes: Short ATM straddles on NIFTY 50 and SENSEX, expiry day and the day before only.

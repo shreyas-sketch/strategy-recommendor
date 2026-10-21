@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Strategy Research</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header><div class="wrap">
+  <h1>Strategy Research</h1>
+  <div class="row" style="align-items:center">
+    <span class="muted small" id="who"></span>
+    <a href="/admin">Admin</a>
+  </div>
+</div></header>
+<main class="wrap wide">
+  <div id="signin" class="card narrow-card hidden">
+    <h2>Admin sign-in needed</h2>
+    <p class="muted">Sign in on the <a href="/admin">admin page</a>, then come back here.</p>
+  </div>
+  <div id="error" class="error hidden" style="margin-bottom:16px"></div>
+
+  <div id="panel" class="hidden">
+    <nav class="tabs" id="tabs">
+      <button data-tab="dashboard" class="on">Dashboard</button>
+      <button data-tab="recommendation">Daily recommendation</button>
+      <button data-tab="performance">Strategy performance</button>
+      <button data-tab="validation">History &amp; validation</button>
+      <button data-tab="data">Data</button>
+      <button data-tab="settings">Settings</button>
+    </nav>
+
+    <!-- Dashboard -->
+    <section data-pane="dashboard">
+      <div class="card">
+        <h2>Status</h2>
+        <div class="grid" id="dash-stats"></div>
+        <ul id="dash-warnings" class="warn-list" style="margin-top:12px"></ul>
+      </div>
+      <div class="card">
+        <h2>Stored data</h2>
+        <div class="table-scroll"><table id="dash-market"></table></div>
+        <div class="table-scroll" style="margin-top:12px"><table id="dash-strategies"></table></div>
+      </div>
+      <p class="muted small">Everything on these pages is calculated on this server from your uploaded data; no AI service is called.
+        Estimates describe past results in similar conditions and are not guarantees.</p>
+    </section>
+
+    <!-- Recommendation -->
+    <section data-pane="recommendation" class="hidden">
+      <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:12px">
+        <span class="muted small" id="rec-meta"></span>
+        <button class="primary" id="rec-run">Recompute now</button>
+      </div>
+      <div id="rec-body"></div>
+    </section>
+
+    <!-- Performance -->
+    <section data-pane="performance" class="hidden">
+      <div class="card">
+        <div class="row" style="justify-content:space-between">
+          <h2 style="margin:0">Strategy comparison</h2>
+          <div class="row">
+            <div><label for="perf-start">From</label><input id="perf-start" type="date"></div>
+            <div><label for="perf-end">To</label><input id="perf-end" type="date"></div>
+            <button id="perf-apply">Apply</button>
+          </div>
+        </div>
+        <p class="muted small">Net = after charges (from the file, or estimated from each strategy's Tradetron cost ratio). "Per ₹1L" divides by the strategy's margin so different capital sizes compare fairly.</p>
+        <div class="table-scroll"><table id="perf-table"></table></div>
+        <h3 class="sub">Cumulative net P&amp;L per ₹1L of margin</h3>
+        <div id="perf-chart"></div>
+      </div>
+      <div class="card">
+        <h2>Results by market regime</h2>
+        <p class="muted small">Regime of the strategy's index at the previous close (trend: 10-day efficiency vs its trailing median; volatility: ATR% vs its trailing median). ± is one standard error.</p>
+        <div id="perf-regimes"></div>
+      </div>
+      <div class="card">
+        <h2>Market conditions vs next-day results</h2>
+        <p class="muted small" id="rel-note"></p>
+        <label class="switch-row small"><input type="checkbox" id="rel-only" checked> Show only supported or suggestive patterns</label>
+        <div class="table-scroll" style="margin-top:8px"><table id="rel-table"></table></div>
+      </div>
+      <div class="card">
+        <h2>Monthly and weekday breakdown</h2>
+        <div id="perf-breakdown"></div>
+      </div>
+    </section>
+
+    <!-- Validation -->
+    <section data-pane="validation" class="hidden">
+      <div class="card">
+        <h2>Walk-forward validation</h2>
+        <p class="muted small" id="bt-note"></p>
+        <div class="table-scroll"><table id="bt-table"></table></div>
+        <h3 class="sub">Cumulative result per ₹1L, following each method's daily pick</h3>
+        <div id="bt-chart"></div>
+        <details style="margin-top:10px"><summary>By quarter and by regime (main engine)</summary>
+          <div class="table-scroll"><table id="bt-quarters"></table></div>
+          <div class="table-scroll" style="margin-top:8px"><table id="bt-regimes"></table></div>
+        </details>
+        <details style="margin-top:10px"><summary>Last 120 days of picks</summary>
+          <div class="table-scroll"><table id="bt-log"></table></div>
+        </details>
+      </div>
+      <div class="card">
+        <h2>Recommendation history</h2>
+        <div class="grid" id="hist-stats"></div>
+        <div class="table-scroll" style="margin-top:12px"><table id="hist-table"></table></div>
+      </div>
+    </section>
+
+    <!-- Data -->
+    <section data-pane="data" class="hidden">
+      <div class="card">
+        <h2>Upload market data (TradingView export)</h2>
+        <form id="up-market" class="row">
+          <div><label for="m-file">CSV or Excel (1-minute or daily)</label><input id="m-file" type="file" accept=".csv,.txt,.xlsx,.xls" required></div>
+          <div><label for="m-symbol">Index</label><select id="m-symbol"></select></div>
+          <label class="switch-row small"><input type="checkbox" id="m-replace"> Replace bars already stored with different prices</label>
+          <button class="primary">Upload</button>
+        </form>
+        <div class="row" style="margin-top:10px">
+          <button id="fetch-daily">Fetch daily candles (NIFTY 50, SENSEX, NIFTY BANK)</button>
+          <span class="muted small">Uses the app's data providers. Gives a regime history for every index even without 1-minute files.</span>
+        </div>
+        <div id="m-result" class="result hidden"></div>
+      </div>
+      <div class="card">
+        <h2>Upload strategy P&amp;L</h2>
+        <p class="muted small">A daily P&amp;L table or a trade/order log (CSV or Excel). Needs a date column and a P&amp;L column; a charges column, trade count or strategy-name column is used when present. The original file is kept unchanged.</p>
+        <form id="up-pnl" class="row">
+          <div><label for="p-file">File</label><input id="p-file" type="file" accept=".csv,.txt,.xlsx,.xls" required></div>
+          <div><label for="p-strategy">Strategy</label><select id="p-strategy"></select></div>
+          <label class="switch-row small"><input type="checkbox" id="p-replace"> Replace days already stored with a different P&amp;L</label>
+          <button class="primary">Upload</button>
+        </form>
+        <div id="p-result" class="result hidden"></div>
+      </div>
+      <div class="card">
+        <h2>Strategies</h2>
+        <p class="muted small">Margin turns P&amp;L into return per ₹1L. Cost per active day is used only when a P&amp;L file has no charges column (seeded from each strategy's Tradetron Cost Lab).</p>
+        <div class="table-scroll"><table id="reg-table"></table></div>
+        <details style="margin-top:10px"><summary>Add a strategy</summary>
+          <form id="reg-add" class="row" style="margin-top:8px">
+            <div><label for="ra-id">ID</label><input id="ra-id" required pattern="[a-z0-9_]{2,60}" size="18"></div>
+            <div><label for="ra-name">Name</label><input id="ra-name" required size="22"></div>
+            <div><label for="ra-und">Index</label><select id="ra-und"></select></div>
+            <div><label for="ra-margin">Margin (₹)</label><input id="ra-margin" type="number" min="1" required size="9"></div>
+            <div><label for="ra-cost">Cost / active day (₹)</label><input id="ra-cost" type="number" min="0" step="0.1" value="0" size="7"></div>
+            <button class="primary">Add</button>
+          </form>
+        </details>
+      </div>
+      <div class="card">
+        <h2>Market data and regimes</h2>
+        <div id="market-view"></div>
+      </div>
+      <div class="card">
+        <h2>Import history</h2>
+        <div class="table-scroll"><table id="imp-table"></table></div>
+      </div>
+      <div class="card master-only">
+        <h2>Backup &amp; restore</h2>
+        <p class="muted small">The backup holds the research database and every original uploaded file. Restoring replaces all research data with the backup's contents.</p>
+        <div class="row">
+          <button id="backup">Download backup</button>
+          <label class="btn" for="restore-file">Restore from backup…</label>
+          <input id="restore-file" type="file" accept=".zip" class="visually-hidden">
+        </div>
+      </div>
+    </section>
+
+    <!-- Settings -->
+    <section data-pane="settings" class="hidden">
+      <div class="card">
+        <h2>Engine</h2>
+        <p class="muted small">The main engine is used for the daily recommendation. Switch only if the walk-forward validation shows another method doing better over enough days.</p>
+        <div class="row"><div><label for="s-engine">Recommendation engine</label><select id="s-engine"></select></div></div>
+        <div class="form-grid" id="s-config" style="margin-top:12px"></div>
+        <div class="row" style="margin-top:12px"><button class="primary master-only" id="s-save">Save</button><span class="muted small" id="s-version"></span></div>
+        <p class="muted small">shrink_k: pseudo-days pulling a regime average toward the overall average · min_history: days before a strategy can be ranked · lower_quantile: conservative end of the range used for ranking · tail_penalty: weight on the average of the worst 5% of days.</p>
+      </div>
+    </section>
+  </div>
+</main>
+<script src="/static/research.js"></script>
+</body>
+</html>

@@ -23,7 +23,7 @@ pip install -r requirements-dev.txt
 cp .env.example .env            # fill in ANTHROPIC_API_KEY, ADMIN_TOKEN, …
 echo "COOKIE_SECURE=0" >> .env  # local http only
 uvicorn app.main:app --reload
-pytest                          # 92 tests
+pytest                          # 119 tests
 ```
 
 * Admin: http://localhost:8000/admin (sign in with `ADMIN_TOKEN`)
@@ -261,3 +261,62 @@ Check the index symbols in `config/settings.yaml` against your Groww / Twelve Da
 accounts.
 
 *Decision support only. Not financial advice.*
+
+## Strategy research (evidence-based daily pick)
+
+**Admin → Strategy research** (`/admin/research`) is a separate, evidence-based recommender. It runs next to
+the Claude ranking above and changes nothing in it. It learns from your own stored history: TradingView
+market data plus each deployed strategy's daily P&L. It then picks which of your strategies to run in the
+next session, or says **"No strategy meets the current selection criteria"**. All of it is calculated on
+the server; no AI API is called.
+
+### Data and storage
+* **Upload market data:** TradingView exports (CSV/Excel, 1-minute or daily) for NIFTY 50, SENSEX or
+  NIFTY BANK.
+  * Columns are detected by name: `time, open, high, low, close`, plus optional `Volume, VWAP, EMA, RSI,
+    RSI-based MA` and Supertrend `Up Trend` / `Down Trend`.
+  * Muhurat, weekend and partial sessions are flagged and kept out of the features.
+* **Fetch daily candles** gets daily OHLC for all three indices through the configured data providers. This
+  gives every index a regime history even without 1-minute files.
+* **Upload strategy P&L:** a daily P&L table or a trade/order log (CSV/Excel). It needs a date column and a
+  P&L column.
+  * A charges, trades or strategy-name column is used when present.
+  * DD/MM vs MM/DD dates are resolved from the data itself.
+* **Originals are never modified.** Each uploaded file is stored byte-for-byte as
+  `data/research/raw/<sha256>.<ext>`. Cleaned rows go to `data/research/research.db` (SQLite on the
+  `/data` volume).
+* **No duplicates.**
+  * Re-uploading the same file is refused.
+  * Overlapping files add only the new rows.
+  * Conflicting values are kept unless you tick "replace".
+* **Strategies and their margins** are seeded from `config/research_strategies.yaml` and editable on the
+  Data tab. Margin turns P&L into return per ₹1 lakh. The cost estimate per active day comes from Tradetron's
+  Cost Lab and is applied only when a P&L file has no charges column.
+* **Backup / restore** (master admin) downloads or restores one zip containing the database and every
+  original file.
+
+### How the pick is made
+1. **Market features at each session's close.** Returns, ATR%, realised volatility, 10-day trend
+   efficiency and distance from the 20-day EMA. From 1-minute data, also VWAP/EMA position, Supertrend
+   direction and flips, RSI, relative volume and last-hour moves.
+2. **Regime** = trending/range-bound × high/low volatility. Thresholds are trailing medians of *earlier*
+   days only. Each strategy is judged on its own index; it falls back to NIFTY 50 when that index has no
+   data.
+3. **Main engine** (`B_regime_shrunk`):
+   * Each strategy's average net return per ₹1L in the current regime, shrunk toward its overall average
+     (fewer regime days means more shrinkage).
+   * Ranked on the conservative (10th-percentile) end of a bootstrap range, minus a penalty on its worst-5%
+     days.
+   * Strategies with too little history, or that don't trade on that weekday, are left out.
+   * If no score is above zero, there is no pick.
+4. **Benchmarks the main engine must beat:** best average so far, best last-60-day average, best raw
+   regime average, ridge regression on the features, running everything equally, and random picks.
+
+The recommendation for the next session is recomputed after every upload and stored with its data cutoff,
+model version and full ranking. Once that day's P&L is uploaded, the actual results are filled in.
+**History & validation** runs a walk-forward test: every past session is scored with data up to the
+previous close only. It reports profitable-pick rate, best/top-2 hit rate, total and drawdown per ₹1L,
+Sharpe, results by quarter and regime, and a p-value against random picks.
+
+**Daily routine:** after the close, upload the day's TradingView export (or press *Fetch daily candles*) and
+each strategy's P&L. Then read *Daily recommendation*.
