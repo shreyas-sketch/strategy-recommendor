@@ -21,12 +21,14 @@ def test_due_windows(env, web):
     assert j.due(at(*mon, 5, 30)) == []
     assert j.due(at(*mon, 5, 40)) == ["prepare"]
     assert j.due(at(*mon, 6, 0)) == ["send"]
-    assert j.due(at(*mon, 9, 0)) == []              # no catch-up after a late deploy
+    assert j.due(at(*mon, 9, 0)) == ["research"]    # no WhatsApp catch-up; the research pick still publishes
     assert j.due(at(2026, 10, 17, 6, 0)) == []      # Saturday
     env.settings.update_admin({"market_holidays": ["2026-10-12"]})
     assert j.due(at(*mon, 6, 0)) == []
     env.settings.update_admin({"notify_enabled": False, "market_holidays": []})
     assert j.due(at(*mon, 6, 0)) == []
+    env.settings.update_admin({"research_pick_enabled": False})
+    assert j.due(at(*mon, 9, 0)) == []
 
 
 def test_send_once_per_day_to_opted_in_only(env, web, monkeypatch):

@@ -81,6 +81,8 @@ loaders.dashboard = async () => {
     stat("Usable market records", num(s.usable_market_records)),
     stat("Strategy records (days)", num(s.strategy_records)),
     stat("Analysis status", esc(s.analysis_status), `Engine: ${esc(s.engine_label)}`),
+    stat("Today's published pick", s.published_today ? (s.published_today.top_strategy ? esc(nameOf(s.published_today.top_strategy)) : "No strategy") : "not yet",
+         s.publish_enabled ? (s.published_today ? `published ${esc(s.published_today.at.slice(11, 16))} IST` : `publishes at ${esc(s.publish_time)} IST`) : "daily publishing is off"),
     stat("Latest recommendation", rec ? `${esc(rec.target_day)}` : "none",
          rec ? (rec.top_strategy ? esc(nameOf(rec.top_strategy)) : "No strategy met the criteria") : ""),
   ].join("");
@@ -97,6 +99,7 @@ function renderRec(r) {
   if (!r) { $("rec-body").innerHTML = '<div class="card muted">No recommendation yet. Upload data, or press “Recompute now”.</div>'; $("rec-meta").textContent = ""; return; }
   const p = r.payload || r;
   $("rec-meta").textContent = `For ${p.target_day} · data up to the ${p.cutoff_day} close · ${p.engine_label} · ${p.model_version}`;
+  if (p.locked) $("rec-meta").textContent += ` · ${p.locked}`;
   const top = p.ranking.find((x) => x.id === p.top_strategy);
   const head = top ? `<div class="card top">
       <div class="muted small">Recommended for ${esc(p.target_day)}</div>
@@ -126,6 +129,15 @@ function renderRec(r) {
 loaders.recommendation = async () => {
   if (!registry.length) registry = (await api("/strategies")).strategies;
   renderRec((await api("/recommendation")).recommendation);
+};
+$("rec-publish").onclick = async (e) => {
+  if (!confirm("Refresh daily candles, compute today's pick and publish it to participants now?")) return;
+  e.target.disabled = true; clearError();
+  try {
+    const r = await api("/publish", { method: "POST" });
+    if (!r.published) throw new Error(`Not published: ${r.reason}`);
+    renderRec((await api("/recommendation")).recommendation);
+  } catch (err) { showError(err); } finally { e.target.disabled = false; }
 };
 $("rec-run").onclick = async (e) => {
   e.target.disabled = true; clearError();
@@ -330,12 +342,18 @@ loaders.settings = async () => {
   $("s-engine").innerHTML = s.engines.map((e) => `<option value="${esc(e.id)}"${e.id === s.engine ? " selected" : ""}>${esc(e.label)}</option>`).join("");
   $("s-config").innerHTML = Object.entries(s.config).filter(([k]) => k !== "seed").map(([k, v]) => `<div><label for="c-${k}">${esc(k)}</label><input id="c-${k}" data-k="${esc(k)}" type="number" step="any" value="${v}"></div>`).join("");
   $("s-version").textContent = `Model version ${s.model_version}`;
+  $("s-pick-enabled").checked = s.schedule.research_pick_enabled; $("s-pick-time").value = s.schedule.research_pick_time;
+  $("s-fetch").checked = s.schedule.research_fetch_daily;
+  const p = s.published_today;
+  $("s-published").textContent = p ? `Today (${s.today}) published at ${p.at.slice(11, 16)} IST with data up to ${p.cutoff_day}.` : `Not published yet today (${s.today}).`;
 };
 $("s-save").onclick = async (e) => {
   clearError(); e.target.disabled = true;
   try {
     const config = {}; document.querySelectorAll("#s-config input").forEach((i) => { config[i.dataset.k] = Number(i.value); });
-    await api("/settings", { method: "PUT", json: { engine: $("s-engine").value, config } }); await loaders.settings();
+    const schedule = { research_pick_enabled: $("s-pick-enabled").checked, research_pick_time: $("s-pick-time").value,
+                       research_fetch_daily: $("s-fetch").checked };
+    await api("/settings", { method: "PUT", json: { engine: $("s-engine").value, config, schedule } }); await loaders.settings();
     alert("Saved. The next recommendation and validation use these settings.");
   } catch (err) { showError(err); } finally { e.target.disabled = false; }
 };

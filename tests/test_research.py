@@ -326,7 +326,15 @@ def _load_history(research, n=140):
     return days
 
 
-def test_daily_workflow_saves_recommendation_and_fills_actuals(research):
+def _freeze(monkeypatch, y, m, d, hh=7, mm=0):
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    import app.research.service as svc
+    monkeypatch.setattr(svc, "now_ist", lambda: datetime(y, m, d, hh, mm, tzinfo=ZoneInfo("Asia/Kolkata")))
+
+
+def test_daily_workflow_saves_recommendation_and_fills_actuals(research, monkeypatch):
+    _freeze(monkeypatch, 2025, 9, 15)                    # the morning after the last stored session
     days = _load_history(research)
     rec = research.latest_recommendation()
     assert rec["target_day"] == next_session(days[-1].isoformat(), set())
@@ -393,3 +401,93 @@ def test_excel_pnl_upload(research):
     r = research.import_file(buf.getvalue(), "pnl.xlsx", "strategy_pnl", "nifty_st_adx_i", "t")
     assert r["added"] == 2 and "charges column" in r["basis"]
     assert research.db.one("SELECT charges FROM strategy_days WHERE day = '2026-01-14'")["charges"] == 35
+
+
+
+# ---------------------------------------------------------------------------
+# the 8 AM published pick
+# ---------------------------------------------------------------------------
+class _FakeRouter:
+    providers = {"fake": None}
+
+    def __init__(self, days):
+        self.days, self.calls = days, []
+
+    def fetch(self, inst, spec, order):
+        self.calls.append(inst["key"])
+        raw = daily_csv(self.days, seed=len(self.calls))
+        df = pd.read_csv(io.BytesIO(raw))
+        df.index = pd.to_datetime(df.pop("time")).dt.tz_localize("Asia/Kolkata")
+        df["volume"] = 0.0
+        return df, "fake"
+
+
+def _at(y, m, d, hh, mm):
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    return datetime(y, m, d, hh, mm, tzinfo=ZoneInfo("Asia/Kolkata"))
+
+
+def test_recommendation_is_never_for_a_past_session(research, monkeypatch):
+    _freeze(monkeypatch, 2025, 9, 17)                    # Wednesday; data ends Friday 12 Sep
+    days = _load_history(research)
+    assert days[-1].isoformat() == "2025-09-12"
+    rec = research.recommend(save=False)
+    assert rec["target_day"] == "2025-09-17" and rec["cutoff_day"] == "2025-09-12"
+    assert "may be out of date" in rec["warnings"][0]
+    _freeze(monkeypatch, 2025, 9, 17, 16, 0)             # after the close -> the next session
+    assert research.recommend(save=False)["target_day"] == "2025-09-18"
+
+
+def test_morning_pick_publishes_today_and_stays_fixed(research, monkeypatch):
+    _freeze(monkeypatch, 2025, 9, 15)
+    days = _load_history(research)
+    research.router = _FakeRouter(days)
+    assert research.participant_view(_at(2025, 9, 15, 7, 30))["status"] == "pending"
+    assert research.participant_view(_at(2025, 9, 15, 9, 0))["status"] == "preparing"
+    out = research.morning_pick(_at(2025, 9, 15, 8, 0))
+    assert out["published"] and out["day"] == "2025-09-15" and out["cutoff_day"] == "2025-09-12"
+    assert set(research.router.calls) == {"NIFTY50", "SENSEX", "BANKNIFTY"}
+    view = research.participant_view(_at(2025, 9, 15, 9, 0))
+    assert view["status"] == "published" and view["recommendation"]["target_day"] == "2025-09-15"
+    assert "config" not in view["recommendation"] and "readings" not in view["recommendation"]["markets"][0]
+    before = view["recommendation"]
+    # a mid-day upload recomputes, but what participants were shown does not change
+    research.import_file(b"Date,P&L\n2025-09-12,-99999\n2025-09-11,-99999\n", "late.csv", "strategy_pnl",
+                         "nifty_st_adx_i", "t", replace=True)
+    assert research.participant_view(_at(2025, 9, 15, 11, 0))["recommendation"] == before
+    assert research.participant_view(_at(2025, 9, 13, 9, 0))["status"] == "closed"      # Saturday
+    assert research.morning_pick(_at(2025, 9, 13, 8, 0))["published"] is False
+
+
+def test_scheduler_publishes_at_eight(env, web, monkeypatch):
+    j = web.jobs
+    assert j.research is not None
+    mon = (2026, 10, 12)
+    assert j.due(_at(*mon, 7, 59)) == []
+    assert j.due(_at(*mon, 8, 0)) == ["research"]
+    assert j.due(_at(*mon, 15, 30)) == []
+    assert j.due(_at(2026, 10, 17, 8, 0)) == []                                  # Saturday
+    env.settings.update_admin({"market_holidays": ["2026-10-12"]})
+    assert j.due(_at(*mon, 8, 0)) == []
+    env.settings.update_admin({"market_holidays": [], "research_pick_time": "08:30"})
+    assert j.due(_at(*mon, 8, 15)) == []
+    calls = []
+    monkeypatch.setattr(j.research, "morning_pick", lambda now=None: calls.append(now) or {"published": True})
+    assert j.tick(_at(*mon, 8, 31)) == ["research"]
+    assert j.tick(_at(*mon, 8, 32)) == []                                        # once per day
+    assert len(calls) == 1
+
+
+def test_participant_and_admin_endpoints_for_the_daily_pick(env, web):
+    assert web.client().get("/api/me/research-today").status_code == 401
+    view = web.participant().get("/api/me/research-today")
+    assert view.status_code == 200 and view.json()["status"] in ("pending", "preparing", "closed")
+    a = web.admin()
+    h = {"X-Requested-With": "fetch"}
+    r = a.put("/api/admin/research/settings", json={"schedule": {"research_pick_time": "25:00"}}, headers=h)
+    assert r.status_code == 422
+    r = a.put("/api/admin/research/settings", json={"schedule": {"research_pick_time": "07:45"}}, headers=h)
+    assert r.status_code == 200 and r.json()["schedule"]["research_pick_time"] == "07:45"
+    assert a.put("/api/admin/research/settings", json={"schedule": {"bogus": 1}}, headers=h).status_code == 422
+    assert a.post("/api/admin/research/publish", headers=h).status_code == 200

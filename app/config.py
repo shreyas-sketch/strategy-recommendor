@@ -71,6 +71,11 @@ class AdminSettings(BaseModel):
     aisensy_otp_campaign: str = "hub_login_code_"
     # Index used for the daily pick's market backdrop and for strategies with no fixed underlying.
     portfolio_benchmark: str = "NIFTY50"
+    # Strategy research: the evidence-based pick for the day is published to participants at this time (IST).
+    research_pick_enabled: bool = True
+    research_pick_time: str = Field("08:00", pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    # Fetch fresh daily candles from the data providers just before computing the pick.
+    research_fetch_daily: bool = True
 
 
 class Conditions(BaseModel):

@@ -134,3 +134,5 @@ tr.hl td { background: var(--accent-soft); }
   .s2 { stroke: #4cc57f; background: #4cc57f; } .s3 { stroke: #c77de0; background: #c77de0; }
   .s4 { stroke: #ff7676; background: #ff7676; } .s5 { stroke: #4fd1cc; background: #4fd1cc; }
 }
+.name-lg { font-size: 22px; font-weight: 700; margin: 2px 0 8px; }
+h2.section-title { font-size: 15px; margin: 22px 0 6px; }

@@ -22,7 +22,43 @@ async function loadMe() {
   return me;
 }
 
+const inr = (x) => (x === null || x === undefined ? "—" : (x < 0 ? "-₹" : "₹") + Math.round(Math.abs(x)).toLocaleString("en-IN"));
+
+function researchHTML(v) {
+  const at = v.published_at ? v.published_at.slice(11, 16) : v.publish_time;
+  const head = `<div class="muted small">Today's strategy · ${esc(v.day)} · ${v.published_at ? "published" : "publishes"} at ${esc(at)} IST</div>`;
+  if (v.status === "closed") return `<div class="card">${head}<div class="name-lg">Market closed today</div>
+    <p class="muted small">The next pick is published on ${esc(v.next_session)} at ${esc(v.publish_time)} IST.</p></div>`;
+  if (v.status === "disabled") return `<div class="card">${head}<p class="muted">The daily strategy pick is switched off by the admin.</p></div>`;
+  if (v.status !== "published") return `<div class="card">${head}<div class="name-lg">${v.status === "pending" ? `Published at ${esc(v.publish_time)} IST` : "Being prepared…"}</div>
+    <p class="muted small">${v.status === "pending" ? "Come back after the publish time to see which strategy to run today." : "Today's pick is being computed. Refresh in a minute."}</p></div>`;
+  const r = v.recommendation;
+  const top = r.ranking.find((x) => x.id === r.top_strategy);
+  const regimes = r.markets.map((m) => `${esc(m.symbol)}: ${esc(m.regime)}, ${esc(m.direction)}`).join(" · ");
+  const body = top ? `<div class="name-lg">${esc(top.name)}</div>
+      <div class="grid">
+        <div class="stat"><div class="k">Expected net today</div><div class="v nocap">${inr(top.expected_rs)}</div><div class="small muted">on ${inr(top.margin)} margin · range ${inr(top.low_rs)} to ${inr(top.high_rs)}</div></div>
+        <div class="stat"><div class="k">Chance of a profitable day</div><div class="v nocap">${top.p_win != null ? Math.round(top.p_win * 100) + "%" : "—"}</div><div class="small muted">model estimate, not a guarantee</div></div>
+        <div class="stat"><div class="k">Evidence</div><div class="v nocap">${top.regime_days ?? 0} / ${top.n_days}</div><div class="small muted">similar days / all days</div></div>
+      </div>
+      <ul class="reasons">${(top.why || []).slice(0, 3).map((w) => `<li>${esc(w)}</li>`).join("")}</ul>
+      ${r.also_qualify.length ? `<p class="small">Also qualifies: ${r.also_qualify.map((id) => esc((r.ranking.find((x) => x.id === id) || {}).name || id)).join(", ")}</p>` : ""}`
+    : `<div class="name-lg">No strategy today</div><p class="small">No strategy meets the current selection criteria, so the recommendation is to sit out.</p>`;
+  const others = r.ranking.filter((x) => x.id !== r.top_strategy).map((x) => `<li><b>${esc(x.name)}</b>: ${esc((x.why || []).find((w) => /Ranks below|does not qualify/.test(w)) || (x.why || [])[0] || "")}</li>`).join("");
+  const warn = r.warnings.length ? `<div class="notice" style="margin-top:10px"><ul class="reasons">${r.warnings.map((w) => `<li>${esc(w)}</li>`).join("")}</ul></div>` : "";
+  return `<div class="card top${top ? "" : " notrade"}">${head}${body}
+    <p class="small muted">Market at the ${esc(r.cutoff_day)} close — ${regimes || "unknown"}</p>${warn}
+    ${others ? `<details><summary class="small">Why not the others</summary><ul class="reasons">${others}</ul></details>` : ""}
+    <p class="small muted">${esc(r.disclaimer || "")}</p></div>`;
+}
+
+async function loadResearch() {
+  try { $("research-today").innerHTML = researchHTML(await api("/api/me/research-today")); }
+  catch (err) { $("research-today").innerHTML = `<div class="card error">${esc(err.message)}</div>`; }
+}
+
 async function loadToday() {
+  loadResearch();
   $("today-loading").classList.remove("hidden");
   $("today-result").innerHTML = "";
   try {

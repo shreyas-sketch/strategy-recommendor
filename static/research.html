@@ -51,7 +51,8 @@
     <section data-pane="recommendation" class="hidden">
       <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:12px">
         <span class="muted small" id="rec-meta"></span>
-        <button class="primary" id="rec-run">Recompute now</button>
+        <div class="row"><button id="rec-run">Recompute now</button>
+          <button class="primary" id="rec-publish">Publish today's pick now</button></div>
       </div>
       <div id="rec-body"></div>
     </section>
@@ -180,6 +181,14 @@
         <p class="muted small">The main engine is used for the daily recommendation. Switch only if the walk-forward validation shows another method doing better over enough days.</p>
         <div class="row"><div><label for="s-engine">Recommendation engine</label><select id="s-engine"></select></div></div>
         <div class="form-grid" id="s-config" style="margin-top:12px"></div>
+        <h3 class="sub">Daily publishing</h3>
+        <div class="row">
+          <label class="switch-row"><input type="checkbox" id="s-pick-enabled"> Publish the pick to participants every trading day</label>
+          <div><label for="s-pick-time">At (IST)</label><input id="s-pick-time" type="time" required></div>
+          <label class="switch-row"><input type="checkbox" id="s-fetch"> Fetch fresh daily candles first</label>
+        </div>
+        <p class="muted small" id="s-published"></p>
+        <p class="muted small">Trading days are weekdays not listed under Market holidays (Admin → Daily WhatsApp). If the app was down at the publish time, the pick is published as soon as it is back, until the 3:30 pm close.</p>
         <div class="row" style="margin-top:12px"><button class="primary master-only" id="s-save">Save</button><span class="muted small" id="s-version"></span></div>
         <p class="muted small">shrink_k: pseudo-days pulling a regime average toward the overall average · min_history: days before a strategy can be ranked · lower_quantile: conservative end of the range used for ranking · tail_penalty: weight on the average of the worst 5% of days.</p>
       </div>

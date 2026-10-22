@@ -147,6 +147,7 @@ def create_app(settings: Settings | None = None, service: RecommendationService 
     research = research or ResearchService(settings, router=service.router)
     advisor = jobs.advisor if jobs else DailyAdvisor(service)
     jobs = jobs or DailyJobs(advisor, AISensyClient())
+    jobs.research = research
     if start_scheduler is None:
         start_scheduler = os.environ.get("SCHEDULER_ENABLED", "1") != "0"
 
@@ -371,6 +372,11 @@ def create_app(settings: Settings | None = None, service: RecommendationService 
         store.delete_user_sessions(user["id"])   # sign out other devices
         set_session(response, user["id"])
         return {"ok": True}
+
+    @app.get("/api/me/research-today")
+    def my_research_today(user: dict = Depends(current_user)):
+        # The evidence-based pick, published once a day (default 08:00 IST); the same for everyone.
+        return research.participant_view()
 
     @app.get("/api/me/today")
     def my_today(user: dict = Depends(current_user)):
@@ -820,7 +826,7 @@ def create_app(settings: Settings | None = None, service: RecommendationService 
 
     @app.post("/api/admin/jobs/{kind}/run", dependencies=[Depends(require_master)], status_code=202)
     def run_job(kind: str, background: BackgroundTasks):
-        if kind not in ("prepare", "send"):
+        if kind not in ("prepare", "send", "research"):
             raise HTTPException(404, "Unknown job")
         background.add_task(jobs.run, kind)   # send skips anyone already notified today
         return {"started": kind}

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from fastapi import Body, Depends, File, Form, HTTPException, Response, UploadFile
+from pydantic import ValidationError
 
 from ..data.base import ProviderError
 from .ingest import IngestError
@@ -103,6 +104,11 @@ def register(app, research: ResearchService, require_admin, require_master) -> N
         research.evaluate_actuals()
         return {"recommendation": rec}
 
+    @app.post(f"{PREFIX}/publish", dependencies=admin)
+    def publish_now():
+        """Run the 8 AM job now: refresh daily candles, rank for today's session and publish it."""
+        return research.morning_pick(uploaded_by="admin")
+
     @app.get(f"{PREFIX}/history", dependencies=admin)
     def history():
         return research.history()
@@ -118,8 +124,14 @@ def register(app, research: ResearchService, require_admin, require_master) -> N
     @app.put(f"{PREFIX}/settings", dependencies=[Depends(require_master)])
     def put_settings(body: dict = Body(...)):
         try:
+            if body.get("schedule"):
+                allowed = {"research_pick_enabled", "research_pick_time", "research_fetch_daily"}
+                unknown = set(body["schedule"]) - allowed
+                if unknown:
+                    raise ValueError(f"Unknown schedule setting(s): {', '.join(sorted(unknown))}")
+                research.settings.update_admin(body["schedule"])
             return research.update_settings(body.get("engine"), body.get("config"))
-        except (ValueError, TypeError) as exc:
+        except (ValueError, TypeError, ValidationError) as exc:
             raise HTTPException(422, str(exc))
 
     @app.get(f"{PREFIX}/backup", dependencies=[Depends(require_master)])

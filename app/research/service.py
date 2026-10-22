@@ -7,7 +7,7 @@ import io
 import logging
 import math
 import threading
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta
 from pathlib import Path
 
 import numpy as np
@@ -15,6 +15,7 @@ import pandas as pd
 import yaml
 
 from ..data.base import FetchSpec, ProviderError
+from ..data.providers import now_ist
 from . import analytics
 from .backtest import regimes_for, walk_forward
 from .db import ResearchDB, now_iso
@@ -26,6 +27,9 @@ log = logging.getLogger(__name__)
 MARKET_SYMBOLS = ("NIFTY50", "SENSEX", "BANKNIFTY")
 BENCHMARK = "NIFTY50"
 ALLOWED_EXT = (".csv", ".txt", ".xlsx", ".xls", ".xlsm")
+MARKET_CLOSE = time(15, 30)
+PARTICIPANT_RANKING_KEYS = ("id", "name", "rank", "status", "underlying", "margin", "regime", "expected", "expected_rs",
+                            "low_rs", "high_rs", "p_win", "score", "n_days", "regime_days", "why")
 
 
 class DuplicateImport(ValueError):
@@ -114,8 +118,13 @@ class ResearchService:
         return self.settings_view()
 
     def settings_view(self) -> dict:
+        a = self.settings.admin
+        today = now_ist().date().isoformat()
         return {"engine": self.engine_name, "engines": [{"id": e, "label": ENGINE_LABELS[e]} for e in ENGINES],
-                "config": self.config.as_dict(), "model_version": MODEL_VERSION}
+                "config": self.config.as_dict(), "model_version": MODEL_VERSION,
+                "schedule": {"research_pick_enabled": a.research_pick_enabled, "research_pick_time": a.research_pick_time,
+                             "research_fetch_daily": a.research_fetch_daily},
+                "today": today, "published_today": self.published(today)}
 
     def _holidays(self) -> set[str]:
         return set(getattr(self.settings.admin, "market_holidays", []) or [])
@@ -340,28 +349,55 @@ class ResearchService:
             "engine": self.engine_name, "engine_label": ENGINE_LABELS[self.engine_name],
             "analysis_status": "ready" if with_days and data["features"] else "waiting for data",
             "cutoff_day": cutoff, "next_session": next_session(cutoff, self._holidays()) if cutoff else None,
+            "publish_time": self.settings.admin.research_pick_time,
+            "publish_enabled": self.settings.admin.research_pick_enabled,
+            "published_today": self.published(now_ist().date().isoformat()),
             "warnings": warnings,
         })
 
     # ---- recommendation ---------------------------------------------------------
-    def cutoff_day(self) -> str | None:
+    def cutoff_day(self, before: str | None = None) -> str | None:
+        """Last session with stored data (market features or P&L), optionally strictly before a day."""
         data = self._data()
         f = data["features"].get(BENCHMARK)
         if f is None:
             f = next(iter(data["features"].values()), None)
         days = []
         if f is not None and not f.empty:
-            days.append(f.index[-1])
+            fd = f.index[f.index < before] if before else f.index
+            if len(fd):
+                days.append(fd[-1])
         if not data["panel"].empty:
-            days.append(data["panel"]["day"].iloc[-1])
+            pd_days = data["panel"]["day"]
+            pd_days = pd_days[pd_days < before] if before else pd_days
+            if len(pd_days):
+                days.append(pd_days.max())
         return max(days) if days else None
 
-    def recommend(self, save: bool = True) -> dict:
+    def is_trading_day(self, day: str) -> bool:
+        return datetime.fromisoformat(day).weekday() < 5 and day not in self._holidays()
+
+    def upcoming_session(self, now: datetime | None = None) -> str:
+        """Today's session if it hasn't closed yet, otherwise the next trading day."""
+        now = now or now_ist()
+        today = now.date().isoformat()
+        if self.is_trading_day(today) and now.time() < MARKET_CLOSE:
+            return today
+        return next_session(today, self._holidays())
+
+    def recommend(self, save: bool = True, target: str | None = None, now: datetime | None = None,
+                  republish: bool = False) -> dict:
+        """Rank the strategies for `target` (default: the upcoming session) from data before that day."""
         data = self._data()
-        cutoff = self.cutoff_day()
+        if target is None:
+            last = self.cutoff_day()
+            if last is None:
+                return {"available": False, "message": "No data stored yet."}
+            # never a past session: a pick made after the fact would look like a forecast in the history
+            target = max(next_session(last, self._holidays()), self.upcoming_session(now))
+        cutoff = self.cutoff_day(before=target)
         if cutoff is None:
-            return {"available": False, "message": "No data stored yet."}
-        target = next_session(cutoff, self._holidays())
+            return {"available": False, "message": f"No data stored before {target}."}
         engine, cfg = self.engine_name, self.config
         strategies, panel, features = data["strategies"], data["panel"], data["features"]
         ctx = regimes_for(strategies, features, BENCHMARK, target)
@@ -378,9 +414,18 @@ class ResearchService:
                     r = score_day(panel, strategies, target, ctx, e, cfg, calendar)
                     others[e] = {"label": ENGINE_LABELS[e], "top_strategy": r["top_strategy"]}
         rec = self._explain(res, ctx, strategies, cutoff, target, engine, data)
+        expected_cutoff = self._previous_session(target)
+        if cutoff < expected_cutoff:
+            rec["warnings"].insert(0, f"The latest stored data is from {cutoff}, but the previous session was "
+                                      f"{expected_cutoff}. The market regime may be out of date: upload or fetch the "
+                                      "missing sessions.")
         rec["other_engines"] = others
         rec = clean(rec)
-        if save:
+        pub = self.published(target)
+        if save and pub and pub["engine"] == engine and not republish:
+            # what participants were shown stays as it was; the history must match it
+            rec["locked"] = f"The pick for {target} was published at {pub['at'][11:16]} and is not changed by recomputing."
+        elif save:
             self.db.save_recommendation(rec)
         return rec
 
@@ -457,6 +502,68 @@ class ResearchService:
             out.append("Its score is not above zero, so it does not qualify.")
         out += [n[0].upper() + n[1:] for n in x["notes"]]
         return out
+
+    def _previous_session(self, day: str) -> str:
+        d = datetime.fromisoformat(day).date()
+        while True:
+            d -= timedelta(days=1)
+            if self.is_trading_day(d.isoformat()):
+                return d.isoformat()
+
+    # ---- the 8 AM pick ------------------------------------------------------------
+    def morning_pick(self, now: datetime | None = None, uploaded_by: str = "scheduler") -> dict:
+        """Refresh daily candles, rank the strategies for today's session and publish the result."""
+        now = now or now_ist()
+        day = now.date().isoformat()
+        if not self.is_trading_day(day):
+            return {"day": day, "published": False, "reason": "not a trading day"}
+        fetched = None
+        if getattr(self.settings.admin, "research_fetch_daily", True) and self.router is not None:
+            used = sorted({s["underlying"] for s in self.db.list_strategies(active_only=True)} | {BENCHMARK})
+            try:
+                fetched = self.fetch_daily(used, uploaded_by=uploaded_by)
+            except Exception as exc:     # stale data is flagged on the pick; it must not stop publishing
+                log.warning("morning fetch failed: %s", exc)
+                fetched = {"error": str(exc)}
+        rec = self.recommend(save=True, target=day, now=now, republish=True)
+        if rec.get("available") is False:
+            return {"day": day, "published": False, "reason": rec.get("message"), "fetched": fetched}
+        self.evaluate_actuals()
+        self.db.set_kv(f"published:{day}", {"engine": rec["engine"], "at": now.isoformat(timespec="seconds"),
+                                             "top_strategy": rec.get("top_strategy"), "cutoff_day": rec["cutoff_day"]})
+        return clean({"day": day, "published": True, "top_strategy": rec.get("top_strategy"),
+                      "cutoff_day": rec["cutoff_day"], "fetched": fetched})
+
+    def published(self, day: str) -> dict | None:
+        return self.db.get_kv(f"published:{day}")
+
+    def participant_view(self, now: datetime | None = None) -> dict:
+        """What participants see: today's published pick, or when it will be published."""
+        now = now or now_ist()
+        admin = self.settings.admin
+        pick_time = getattr(admin, "research_pick_time", "08:00")
+        day = now.date().isoformat()
+        out = {"day": day, "publish_time": pick_time, "now": now.isoformat(timespec="minutes")}
+        if not self.is_trading_day(day):
+            return {**out, "status": "closed", "next_session": next_session(day, self._holidays())}
+        pub = self.published(day)
+        if not pub:
+            if not getattr(admin, "research_pick_enabled", True):
+                return {**out, "status": "disabled"}
+            hh, mm = map(int, pick_time.split(":"))
+            late = now.time() >= time(hh, mm)
+            return {**out, "status": "preparing" if late else "pending"}
+        row = self.db.one("SELECT payload FROM recommendations WHERE target_day = ? AND engine = ?", (day, pub["engine"]))
+        if not row:
+            return {**out, "status": "preparing"}
+        import json
+        p = json.loads(row["payload"])
+        return clean({**out, "status": "published", "published_at": pub["at"], "recommendation": {
+            "target_day": p["target_day"], "cutoff_day": p["cutoff_day"], "headline": p["headline"],
+            "top_strategy": p["top_strategy"], "also_qualify": p.get("also_qualify", []),
+            "engine_label": p.get("engine_label"), "warnings": p.get("warnings", []), "disclaimer": p.get("disclaimer"),
+            "markets": [{k: m.get(k) for k in ("symbol", "data_day", "regime", "direction")} for m in p.get("markets", [])],
+            "ranking": [{k: x.get(k) for k in PARTICIPANT_RANKING_KEYS} for x in p.get("ranking", [])]}})
 
     def latest_recommendation(self) -> dict | None:
         rows = self.db.list_recommendations(limit=1)

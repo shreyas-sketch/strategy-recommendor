@@ -23,7 +23,7 @@ pip install -r requirements-dev.txt
 cp .env.example .env            # fill in ANTHROPIC_API_KEY, ADMIN_TOKEN, …
 echo "COOKIE_SECURE=0" >> .env  # local http only
 uvicorn app.main:app --reload
-pytest                          # 119 tests
+pytest                          # 123 tests
 ```
 
 * Admin: http://localhost:8000/admin (sign in with `ADMIN_TOKEN`)
@@ -318,5 +318,35 @@ model version and full ranking. Once that day's P&L is uploaded, the actual resu
 previous close only. It reports profitable-pick rate, best/top-2 hit rate, total and drawdown per ₹1L,
 Sharpe, results by quarter and regime, and a p-value against random picks.
 
-**Daily routine:** after the close, upload the day's TradingView export (or press *Fetch daily candles*) and
-each strategy's P&L. Then read *Daily recommendation*.
+### The 8 AM pick on the participant dashboard
+At **08:00 IST on every trading day** the scheduler publishes the day's pick. A trading day is a weekday
+not listed under Admin → Daily WhatsApp → Market holidays.
+
+The job does three things:
+1. Fetches fresh daily candles for the indices the strategies trade.
+2. Ranks the strategies for **today's** session, using only data up to the previous close.
+3. Publishes the result.
+
+What participants see in **My pick → Today's strategy**:
+* Before 8 AM: when the pick will be published.
+* After 8 AM: the strategy to run (or "No strategy today"), with:
+  * expected net on its margin, with a range
+  * the estimated chance of a profitable day
+  * how many similar past days back it up
+  * the reasons, and why the other strategies rank lower
+  * any warnings
+* On market holidays and weekends: when the next pick comes.
+
+The AI market read stays below it as a separate method.
+
+Rules:
+* **A published pick does not change during the day.** Later uploads or recomputes do not alter what
+  participants saw, and the history keeps the published version. *Publish today's pick now* on the
+  admin page deliberately re-publishes.
+* **If the app was down at 8 AM,** the pick is published as soon as it is back, until the 3:30 pm close.
+* **If the latest stored data is older than the previous session,** the pick carries a warning that the
+  market regime may be out of date.
+* **Settings:** the publish time, on/off and the candle fetch are under Strategy research → Settings.
+
+**Daily routine:** after the close, upload each strategy's P&L for the day (and the TradingView export if
+you use 1-minute data). The 8 AM job does the rest.

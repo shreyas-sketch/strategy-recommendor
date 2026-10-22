@@ -93,6 +93,7 @@ class DailyJobs:
         self.store = advisor.store
         self.settings = advisor.settings
         self.aisensy = aisensy or AISensyClient()
+        self.research = None             # ResearchService, attached by the app: publishes the 8 AM pick
 
     # ---- schedule ---------------------------------------------------------
     def is_notify_day(self, now: datetime) -> bool:
@@ -102,18 +103,30 @@ class DailyJobs:
         return now.strftime("%Y-%m-%d") not in set(admin.market_holidays)
 
     def due(self, now: datetime) -> list[str]:
+        jobs = self._research_due(now)
         admin = self.settings.admin
         if not admin.notify_enabled or not self.is_notify_day(now):
-            return []
+            return jobs
         hh, mm = map(int, admin.notify_time.split(":"))
         send_at = now.replace(hour=hh, minute=mm, second=0, microsecond=0)
         prepare_at = send_at - timedelta(minutes=admin.prepare_lead_minutes)
-        jobs = []
         if prepare_at <= now < send_at:
             jobs.append("prepare")
         if send_at <= now < send_at + SEND_WINDOW:
             jobs.append("send")
         return jobs
+
+    def _research_due(self, now: datetime) -> list[str]:
+        """The research pick is published from its time until the close; a late start still publishes it."""
+        admin = self.settings.admin
+        if self.research is None or not admin.research_pick_enabled:
+            return []
+        if not self.research.is_trading_day(now.strftime("%Y-%m-%d")):
+            return []
+        hh, mm = map(int, admin.research_pick_time.split(":"))
+        pick_at = now.replace(hour=hh, minute=mm, second=0, microsecond=0)
+        close = now.replace(hour=15, minute=30, second=0, microsecond=0)
+        return ["research"] if pick_at <= now < close else []
 
     def tick(self, now: datetime | None = None) -> list[str]:
         """Run whatever is due; the DB lock makes each job run once per day."""
@@ -122,14 +135,17 @@ class DailyJobs:
         for kind in self.due(now):
             if self.store.claim_job(kind, now.strftime("%Y-%m-%d")):
                 ran.append(kind)
-                self.run(kind)
+                self.run(kind, now)
         return ran
 
     # ---- jobs -------------------------------------------------------------
-    def run(self, kind: str) -> dict:
-        day = today_ist()
+    def run(self, kind: str, now: datetime | None = None) -> dict:
+        day = now.strftime("%Y-%m-%d") if now else today_ist()
         try:
-            summary = self.prepare() if kind == "prepare" else self.send_all()
+            if kind == "research":
+                summary = self.research.morning_pick(now)
+            else:
+                summary = self.prepare() if kind == "prepare" else self.send_all()
         except Exception:
             log.exception("daily job %s failed", kind)
             self.store.release_job(kind, day)   # allow a retry on the next tick
